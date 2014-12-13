@@ -23,3 +23,20 @@ main = hspec $ do
         Yellow 7 `shouldBe` Nothing
       dropCoin [[],[],[],[],[],[],[]]
         Yellow (-1) `shouldBe` Nothing
+
+    it "should give the right element on the lower left position" $ do
+      index [[Yellow],[],[],[],[],[],[]]
+        (0,0) `shouldBe` Just Yellow
+
+    it "should give the right element on the upper right position" $ do
+      index [[],[],[],[],[],[],[Empty, Empty, Empty, Empty, Empty, Yellow]]
+        (6,5) `shouldBe` Just Yellow
+
+    it "should give Empty on a valid, yet empty position" $ do
+      index [[],[],[],[],[],[],[]] (0, 0) `shouldBe` Just Empty
+
+    it "should not give any element on an invalid position" $ do
+      index [[],[],[],[],[],[],[]] (-1, 0) `shouldBe` Nothing
+      index [[],[],[],[],[],[],[]] (0, -1) `shouldBe` Nothing
+      index [[],[],[],[],[],[],[]] (7, 5) `shouldBe` Nothing
+      index [[],[],[],[],[],[],[]] (6, 6) `shouldBe` Nothing
