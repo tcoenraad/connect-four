@@ -11,7 +11,8 @@ module Board where
   columns = 7
 
   dropCoin :: Board -> Coin -> Int -> Maybe Board
-  dropCoin (c:cs) coin 0 | length c >= rows = Nothing
-                         | otherwise = Just $ (c ++ [coin]) : cs
-  dropCoin (c:cs) coin i | i < 0 || i >= columns = Nothing
-                         | otherwise = (dropCoin cs coin (i - 1)) >>= \x -> Just (c : x)
+  dropCoin cs coin i | i < 0 || i >= columns = Nothing
+                     | length column >= rows = Nothing
+                     | otherwise = Just $ (take i cs) ++ [(column ++ [coin])] ++ (drop (i + 1) cs)
+                     where
+                       column = (cs !! i)
