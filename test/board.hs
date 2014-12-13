@@ -18,12 +18,6 @@ main = hspec $ do
       dropCoin [[Yellow, Yellow, Yellow, Yellow, Yellow, Yellow],[],[],[],[],[],[]]
         Yellow 0 `shouldBe` Nothing
 
-    it "should not be able to drop a coin in a column that does not exist" $ do
-      dropCoin [[],[],[],[],[],[],[]]
-        Yellow 7 `shouldBe` Nothing
-      dropCoin [[],[],[],[],[],[],[]]
-        Yellow (-1) `shouldBe` Nothing
-
     it "should give the right coin on the lower left position" $ do
       index [[Yellow],[],[],[],[],[],[]]
         (0,0) `shouldBe` Just Yellow

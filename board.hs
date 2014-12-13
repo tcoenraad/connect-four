@@ -13,12 +13,13 @@ module Board where
   index :: Board -> (Int, Int) -> Maybe Coin
   index cs (x, y) | x < 0 || x >= columns = Nothing
                   | y < 0 || y >= rows = Nothing
-                  | length (cs !! x) <= y = Just Empty
-                  | otherwise = Just $ (cs !! x) !! y
+                  | length column <= y = Just Empty
+                  | otherwise = Just $ column !! y
+                  where
+                    column = (cs !! x)
 
   dropCoin :: Board -> Coin -> Int -> Maybe Board
-  dropCoin cs coin i | i < 0 || i >= columns = Nothing
-                     | length column >= rows = Nothing
+  dropCoin cs coin i | length column >= rows = Nothing
                      | otherwise = Just $ (take i cs) ++ [(column ++ [coin])] ++ (drop (i + 1) cs)
                      where
                        column = (cs !! i)
