@@ -29,12 +29,11 @@ module Board where
 
   winningMove :: Board -> (Int, Int) -> Bool
   winningMove b (x, y) = left + right >= strike
-                        || up + down >= strike
+                        || down >= strike
     where
       left = consecutive_coins_length b (x, y) (-1, 0) 0
       right = consecutive_coins_length b (x, y) (1, 0) 0
-      up = consecutive_coins_length b (x, y) (0, -1) 0
-      down = consecutive_coins_length b (x, y) (0, 1) 0
+      down = consecutive_coins_length b (x, y) (0, -1) 0
 
   consecutive_coins_length :: Board -> (Int, Int) -> (Int, Int) -> Int -> Int
   consecutive_coins_length b (x, y) (diff_x, diff_y) shift | shift == strike = 0

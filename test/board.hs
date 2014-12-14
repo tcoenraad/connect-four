@@ -41,19 +41,13 @@ main = hspec $ do
     it "should detect a horizontal strike halfway" $ do
       winningMove [[Yellow],[Yellow],[Yellow],[Yellow],[],[],[]] (2, 0) `shouldBe` True
 
-    it "should detect a horizontal strike from the end" $ do
+    it "should detect a horizontal strike on the end" $ do
       winningMove [[Yellow],[Yellow],[Yellow],[Yellow],[],[],[]] (3, 0) `shouldBe` True
 
     it "should detect a not connected horizontal strike" $ do
       winningMove [[Yellow],[Yellow],[],[Yellow],[Yellow],[],[]] (1, 0) `shouldBe` False
 
-    it "should detect a vertical strike from the start" $ do
-      winningMove [[Yellow,Yellow,Yellow,Yellow],[],[],[],[],[],[]] (0, 0) `shouldBe` True
-
-    it "should detect a vertical strike halfway" $ do
-      winningMove [[Yellow,Yellow,Yellow,Yellow],[],[],[],[],[],[]] (0, 2) `shouldBe` True
-
-    it "should detect a vertical strike from the end" $ do
+    it "should detect a vertical strike on the end" $ do
       winningMove [[Yellow,Yellow,Yellow,Yellow],[],[],[],[],[],[]] (0, 3) `shouldBe` True
 
     it "should detect a not connected vertical strike" $ do
