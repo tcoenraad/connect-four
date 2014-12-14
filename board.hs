@@ -15,17 +15,17 @@ module Board where
 
   index :: Board -> (Int, Int) -> Maybe Coin
   index b (x, y) | x < 0 || x >= columns = Nothing
-                  | y < 0 || y >= rows = Nothing
-                  | length column <= y = Just Empty
-                  | otherwise = Just $ column !! y
-                  where
-                    column = (b !! x)
+                 | y < 0 || y >= rows = Nothing
+                 | length column <= y = Just Empty
+                 | otherwise = Just $ column !! y
+                 where
+                   column = (b !! x)
 
   dropCoin :: Board -> Coin -> Int -> Maybe Board
   dropCoin b coin i | length column >= rows = Nothing
-                     | otherwise = Just $ (take i b) ++ [(column ++ [coin])] ++ (drop (i + 1) b)
-                     where
-                       column = (b !! i)
+                    | otherwise = Just $ (take i b) ++ [(column ++ [coin])] ++ (drop (i + 1) b)
+                    where
+                      column = (b !! i)
 
   winningMove :: Board -> (Int, Int) -> Bool
   winningMove b (x, y) = left + right >= strike
