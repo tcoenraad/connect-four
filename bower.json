@@ -1,0 +1,6 @@
+{
+  "name": "connect-four",
+  "dependencies": {
+    "socket.io-client": "~1.2.1"
+  }
+}
