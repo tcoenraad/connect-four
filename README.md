@@ -17,5 +17,5 @@ How to run
 ----------
 ### Run tests
 ```bash
-    $ runhaskell tests/*
+    $ cabal test
 ```
