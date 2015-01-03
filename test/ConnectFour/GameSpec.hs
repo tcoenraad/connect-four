@@ -1,10 +1,10 @@
-module GameSpec where
+module ConnectFour.GameSpec where
 
   import Test.Hspec
   import Data.Maybe
 
-  import Game
-  import Board hiding (dropCoin)
+  import ConnectFour.Game
+  import ConnectFour.Board hiding (dropCoin)
 
   emptyBoard :: Board
   emptyBoard = [[],[],[],[],[],[],[]]

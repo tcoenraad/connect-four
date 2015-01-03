@@ -1,8 +1,7 @@
-
-module Game where
+module ConnectFour.Game where
 
   import Data.Maybe
-  import qualified Board
+  import qualified ConnectFour.Board as Board
 
   data Game = Game {
     board :: Board.Board,

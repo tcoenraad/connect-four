@@ -1,4 +1,4 @@
-module Board where
+module ConnectFour.Board where
 
   data Coin = Red | Green | Blue | Yellow | Empty deriving (Eq, Show)
   type Column = [Coin]

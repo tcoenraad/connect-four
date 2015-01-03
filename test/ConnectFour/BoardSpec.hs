@@ -1,7 +1,7 @@
-module BoardSpec where
+module ConnectFour.BoardSpec where
 
   import Test.Hspec
-  import Board
+  import ConnectFour.Board
 
   main :: IO ()
   main = hspec spec
