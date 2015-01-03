@@ -3,6 +3,7 @@ module ConnectFour.Board where
   data Coin = Red | Green | Blue | Yellow | Empty deriving (Eq, Show)
   type Column = [Coin]
   type Board = [Column]
+  type Pos = (Int, Int)
 
   rows :: Int
   rows = 6
@@ -13,7 +14,7 @@ module ConnectFour.Board where
   strike :: Int
   strike = 4
 
-  index :: Board -> (Int, Int) -> Maybe Coin
+  index :: Board -> Pos -> Maybe Coin
   index b (x, y) | x < 0 || x >= columns = Nothing
                  | y < 0 || y >= rows = Nothing
                  | length column <= y = Just Empty
@@ -27,8 +28,13 @@ module ConnectFour.Board where
                     where
                       column = b !! i
 
-  winningMove :: Board -> (Int, Int) -> Bool
-  winningMove b (x, y) = west + east >= strike
+  winningColumn :: Board -> Int -> Bool
+  winningColumn b x = winningPos b (x, y)
+                    where
+                      y = length (b !! x) - 1
+
+  winningPos :: Board -> Pos -> Bool
+  winningPos b (x, y) = west + east >= strike
                       || south >= strike
                       || southwest + northeast >= strike
                       || northwest + southeast >= strike
@@ -41,7 +47,7 @@ module ConnectFour.Board where
       northwest = consecutiveCoinsLength b (x, y) (-1, 1) 0
       southeast = consecutiveCoinsLength b (x, y) (1, -1) 0
 
-  consecutiveCoinsLength :: Board -> (Int, Int) -> (Int, Int) -> Int -> Int
+  consecutiveCoinsLength :: Board -> Pos -> Pos -> Int -> Int
   consecutiveCoinsLength b (x, y) (diff_x, diff_y) offset | offset == strike = 0
                                                           | coin == coin' = 1 + consecutiveCoinsLength b (x, y) (diff_x, diff_y) (offset + 1)
                                                           | otherwise = 0
