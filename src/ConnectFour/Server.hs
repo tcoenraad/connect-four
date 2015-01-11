@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module ConnectFour.Server where
 
@@ -29,8 +30,8 @@ module ConnectFour.Server where
     wsClients :: TVar (Map Name WSClient)
   }
 
-  socketHandlerWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
-  socketHandlerWS state socket = do
+  handleSocketWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
+  handleSocketWS state socket = do
     liftIO $ handshakeWS socket state
 
     return EIO.SocketApp {
@@ -41,47 +42,49 @@ module ConnectFour.Server where
     , EIO.saOnDisconnect = return ()
     }
 
-  socketHandlerTCP :: Server -> Socket -> IO ()
-  socketHandlerTCP state socket = forever $ do
+  handleSocketTCP :: Server -> Socket -> IO ()
+  handleSocketTCP state socket = forever $ do
     (handle, _, _) <- accept socket
     hSetBuffering handle NoBuffering
     handshakeTCP handle state
-    forkIO $ commandTCP handle state
+    forkIO $ processCommandTCP handle state
 
-  commandTCP :: Handle -> Server -> IO ()
-  commandTCP handle state = forever $ do
+  processCommandTCP :: Handle -> Server -> IO ()
+  processCommandTCP handle state = forever $ do
     line <- hGetLine handle
     broadcastTCP state line
     broadcastWS state line
 
-  handshakeWS :: EIO.Socket -> Server -> IO ()
-  handshakeWS socket Server{wsClients=clients} = do
+  handshake :: forall a. a -> TVar (Map String a) -> IO ()
+  handshake handle clients = do
     uuid <- UUID.toString <$> UUID.nextRandom
 
-    atomically $ do
-      clientMap <- readTVar clients
-      writeTVar clients $ Map.insert uuid socket clientMap
-
-  handshakeTCP :: Handle -> Server -> IO ()
-  handshakeTCP handle Server{tcpClients=clients} = do
-    uuid <- UUID.toString <$> UUID.nextRandom
     atomically $ do
       clientMap <- readTVar clients
       writeTVar clients $ Map.insert uuid handle clientMap
+
+  handshakeWS :: EIO.Socket -> Server -> IO ()
+  handshakeWS socket Server{wsClients=clients} = do
+    handshake socket clients
+
+  handshakeTCP :: Handle -> Server -> IO ()
+  handshakeTCP handle Server{tcpClients=clients} = do
+    handshake handle clients
 
   sendMessageWS :: EIO.Socket -> String -> IO ()
   sendMessageWS socket msg = atomically $ do
     EIO.send socket (EIO.TextPacket $ Text.pack msg)
 
-  broadcastWS :: Server -> String -> IO ()
-  broadcastWS Server{wsClients=clients} msg = do
-    clientMap <- readTVarIO clients
-    mapM_ (\socket -> sendMessageWS socket msg) (Map.elems clientMap)
-
   sendMessageTCP :: Handle -> String -> IO ()
   sendMessageTCP handle msg = hPutStrLn handle msg
 
-  broadcastTCP :: Server -> String -> IO ()
-  broadcastTCP Server{tcpClients=clients} msg = do
+  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map Name a) -> String -> IO ()
+  broadcast sendMessage clients msg = do
     clientMap <- readTVarIO clients
-    mapM_ (\handle -> sendMessageTCP handle msg) (Map.elems clientMap)
+    mapM_ (\socket -> sendMessage socket msg) (Map.elems clientMap)
+
+  broadcastWS :: Server -> String -> IO ()
+  broadcastWS Server{wsClients=clients} msg = broadcast sendMessageWS clients msg
+
+  broadcastTCP :: Server -> String -> IO ()
+  broadcastTCP Server{tcpClients=clients} msg = broadcast sendMessageTCP clients msg

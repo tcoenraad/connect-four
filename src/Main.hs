@@ -39,11 +39,11 @@ module Main where
     eio <- EIO.initialize
     dataDir <- getDataDir
     Snap.quickHttpServe $
-      Snap.route [ ("/engine.io", EIO.handler eio (socketHandlerWS state) EIOSnap.snapAPI)
+      Snap.route [ ("/engine.io", EIO.handler eio (handleSocketWS state) EIOSnap.snapAPI)
                  , ("/", Snap.serveDirectory dataDir)
                  ]
 
   mainTCP :: Server -> IO ()
   mainTCP state = do
     sock <- listenOn $ PortNumber 8001
-    socketHandlerTCP state sock
+    handleSocketTCP state sock
