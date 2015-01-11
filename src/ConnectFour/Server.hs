@@ -13,7 +13,7 @@ module ConnectFour.Server where
   import Control.Monad (forever)
 
   import Network (accept, Socket)
-  import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode (..),Handle)
+  import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode (..), Handle)
 
   import qualified Data.Map as Map
   import qualified Data.Text as Text
@@ -21,13 +21,13 @@ module ConnectFour.Server where
   import qualified Data.UUID.V4 as UUID
   import qualified Network.EngineIO as EIO
 
-  type Name = String
+  type ID = String
   type TCPClient = Handle
   type WSClient = EIO.Socket
 
   data Server = Server {
-    tcpClients :: TVar (Map Name TCPClient),
-    wsClients :: TVar (Map Name WSClient)
+    tcpClients :: TVar (Map ID TCPClient),
+    wsClients :: TVar (Map ID WSClient)
   }
 
   handleSocketWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
@@ -35,12 +35,15 @@ module ConnectFour.Server where
     liftIO $ handshakeWS socket state
 
     return EIO.SocketApp {
-      EIO.saApp = forever $ do
-        (EIO.TextPacket packet) <- liftIO $ atomically $ EIO.receive socket
-        broadcastTCP state (Text.unpack packet)
-        broadcastWS state (Text.unpack packet)
+      EIO.saApp = processCommandWS
     , EIO.saOnDisconnect = return ()
     }
+
+  processCommandWS :: EIO.Socket -> Server -> IO ()
+  processCommandWS socket state = forever $ do 
+    (EIO.TextPacket packet) <- liftIO $ atomically $ EIO.receive socket
+    broadcastTCP state (Text.unpack packet)
+    broadcastWS state (Text.unpack packet)
 
   handleSocketTCP :: Server -> Socket -> IO ()
   handleSocketTCP state socket = forever $ do
@@ -78,7 +81,7 @@ module ConnectFour.Server where
   sendMessageTCP :: Handle -> String -> IO ()
   sendMessageTCP handle msg = hPutStrLn handle msg
 
-  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map Name a) -> String -> IO ()
+  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map ID a) -> String -> IO ()
   broadcast sendMessage clients msg = do
     clientMap <- readTVarIO clients
     mapM_ (\socket -> sendMessage socket msg) (Map.elems clientMap)
