@@ -5,6 +5,7 @@
 module ConnectFour.Server where
 
   import Data.Map.Strict
+  import Data.List.Split
 
   import Control.Applicative
   import Control.Concurrent (forkIO)
@@ -32,10 +33,12 @@ module ConnectFour.Server where
 
   handleSocketWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
   handleSocketWS state socket = do
-    liftIO $ handshakeWS socket state
+    liftIO $ do
+      uuid <- UUID.toString <$> UUID.nextRandom
+      handshakeWS uuid socket state
 
     return EIO.SocketApp {
-      EIO.saApp = processCommandWS
+      EIO.saApp = processCommandWS socket state
     , EIO.saOnDisconnect = return ()
     }
 
@@ -49,8 +52,19 @@ module ConnectFour.Server where
   handleSocketTCP state socket = forever $ do
     (handle, _, _) <- accept socket
     hSetBuffering handle NoBuffering
-    handshakeTCP handle state
-    forkIO $ processCommandTCP handle state
+
+    line <- hGetLine handle
+    args <- return $ splitOn " " line
+    if length args < 2 then
+      sendMessageTCP handle "First identify yourself!"
+    else
+      case (head args) of
+        "name" ->
+          do
+            handshakeTCP (args !! 1) handle state
+            _ <- forkIO $ processCommandTCP handle state
+            return ()
+        _ -> sendMessageTCP handle "First identify yourself!"
 
   processCommandTCP :: Handle -> Server -> IO ()
   processCommandTCP handle state = forever $ do
@@ -58,21 +72,19 @@ module ConnectFour.Server where
     broadcastTCP state line
     broadcastWS state line
 
-  handshake :: forall a. a -> TVar (Map String a) -> IO ()
-  handshake handle clients = do
-    uuid <- UUID.toString <$> UUID.nextRandom
-
+  handshake :: forall a. ID -> a -> TVar (Map ID a) -> IO ()
+  handshake name handle clients = do
     atomically $ do
       clientMap <- readTVar clients
-      writeTVar clients $ Map.insert uuid handle clientMap
+      writeTVar clients $ Map.insert name handle clientMap
 
-  handshakeWS :: EIO.Socket -> Server -> IO ()
-  handshakeWS socket Server{wsClients=clients} = do
-    handshake socket clients
+  handshakeWS :: ID -> EIO.Socket -> Server -> IO ()
+  handshakeWS name socket Server{wsClients=clients} = do
+    handshake name socket clients
 
-  handshakeTCP :: Handle -> Server -> IO ()
-  handshakeTCP handle Server{tcpClients=clients} = do
-    handshake handle clients
+  handshakeTCP :: ID -> Handle -> Server -> IO ()
+  handshakeTCP name handle Server{tcpClients=clients} = do
+    handshake name handle clients
 
   sendMessageWS :: EIO.Socket -> String -> IO ()
   sendMessageWS socket msg = atomically $ do

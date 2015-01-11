@@ -21,7 +21,7 @@ Executable server
     network,
     snap-core,
     snap-server,
-    socket-io,
+    split,
     stm,
     text,
     uuid,
