@@ -3,18 +3,13 @@
 
 module ConnectFour.Server where
 
-  import Debug.Trace
-
   import Data.Map.Strict
 
   import Control.Applicative
-  import GHC.Conc (unsafeIOToSTM)
   import Control.Concurrent (forkIO)
   import Control.Concurrent.STM
   import Control.Monad.IO.Class (MonadIO, liftIO)
   import Control.Monad (forever)
-  import Control.Monad.State.Strict (StateT)
-  import Control.Monad.Trans.Reader (ReaderT)
 
   import Network (accept, Socket)
   import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode (..),Handle)
