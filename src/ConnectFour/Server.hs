@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module ConnectFour.Server where
 
@@ -21,6 +22,8 @@ module ConnectFour.Server where
   import qualified Data.UUID as UUID
   import qualified Data.UUID.V4 as UUID
   import qualified Network.EngineIO as EIO
+
+  import qualified ConnectFour.Protocol as Protocol
 
   type ID = String
   type TCPClient = Handle
@@ -59,7 +62,7 @@ module ConnectFour.Server where
       sendMessageTCP handle "First identify yourself!"
     else
       case (head args) of
-        "name" ->
+        (Protocol.handshake -> True) ->
           do
             handshakeTCP (args !! 1) handle state
             _ <- forkIO $ processCommandTCP handle state
