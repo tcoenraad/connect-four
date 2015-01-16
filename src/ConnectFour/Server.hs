@@ -5,7 +5,7 @@
 
 module ConnectFour.Server where
 
-  import Data.Map.Strict
+  import Data.Map.Strict hiding (map)
   import Data.List.Split
 
   import Control.Applicative
@@ -44,6 +44,13 @@ module ConnectFour.Server where
     wsClients :: TVar (Map ID WSClient)
   }
 
+  nameInUse :: String -> Server -> IO (Bool)
+  nameInUse n Server{tcpClients=tcp, wsClients=ws} =
+    atomically $ do
+      tcpClientMap <- readTVar tcp
+      wsClientMap <- readTVar ws
+      return $ or $ map (\name -> name == n) (Map.keys tcpClientMap ++ Map.keys wsClientMap)
+
   handleSocketWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
   handleSocketWS state socket = do
     liftIO $ do
@@ -71,9 +78,12 @@ module ConnectFour.Server where
     case args of
       (Protocol.handshake -> True) ->
         do
-          handshakeTCP args handle state
-          _ <- forkIO $ processCommandTCP handle state
-          return ()
+          handshake <- handshakeTCP args handle state
+          if handshake then do
+            _ <- forkIO $ processCommandTCP handle state
+            return ()
+          else
+            sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse
       _ -> sendMessageTCP TCPClient{tcpHandle=handle} "First identify yourself!"
 
   processCommandTCP :: Handle -> Server -> IO ()
@@ -94,10 +104,20 @@ module ConnectFour.Server where
     handshake name client clients where
       client = WSClient { wsSocket = socket }
 
-  handshakeTCP :: [String] -> Handle -> Server -> IO ()
-  handshakeTCP args handle Server{tcpClients=clients} = do
-    handshake (args !! 1) client clients where
-      client = TCPClient { tcpHandle = handle }
+  handshakeTCP :: [String] -> Handle -> Server -> IO (Bool)
+  handshakeTCP args handle s@Server{tcpClients=clients} = do
+    name <- return $ args !! 1
+    inUse <- nameInUse name s
+    if inUse then do
+      return False
+    else do
+      handshake (args !! 1) client clients
+      return True
+        where
+          client = TCPClient { tcpHandle = handle,
+                               tcpChat = (args !! 2) !! 0 == Protocol.true,
+                               tcpChallenge = (args !! 2) !! 1 == Protocol.true,
+                               tcpLeaderboard = (args !! 2) !! 2 == Protocol.true }
 
   sendMessageWS :: WSClient -> String -> IO ()
   sendMessageWS WSClient{wsSocket=socket} msg = atomically $ do
