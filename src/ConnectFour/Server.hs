@@ -26,8 +26,18 @@ module ConnectFour.Server where
   import qualified ConnectFour.Protocol as Protocol
 
   type ID = String
-  type TCPClient = Handle
-  type WSClient = EIO.Socket
+  data TCPClient = TCPClient {
+    tcpHandle :: Handle,
+    tcpChat :: Bool,
+    tcpChallenge :: Bool,
+    tcpLeaderboard :: Bool
+  }
+  data WSClient = WSClient {
+    wsSocket :: EIO.Socket,
+    wsChat :: Bool,
+    wsChallenge :: Bool,
+    wsLeaderboard :: Bool
+  }
 
   data Server = Server {
     tcpClients :: TVar (Map ID TCPClient),
@@ -58,43 +68,43 @@ module ConnectFour.Server where
 
     line <- hGetLine handle
     args <- return $ splitOn " " line
-    if length args < 2 then
-      sendMessageTCP handle "First identify yourself!"
-    else
-      case (head args) of
-        (Protocol.handshake -> True) ->
-          do
-            handshakeTCP (args !! 1) handle state
-            _ <- forkIO $ processCommandTCP handle state
-            return ()
-        _ -> sendMessageTCP handle "First identify yourself!"
+    case args of
+      (Protocol.handshake -> True) ->
+        do
+          handshakeTCP args handle state
+          _ <- forkIO $ processCommandTCP handle state
+          return ()
+      _ -> sendMessageTCP TCPClient{tcpHandle=handle} "First identify yourself!"
 
   processCommandTCP :: Handle -> Server -> IO ()
   processCommandTCP handle state = forever $ do
     line <- hGetLine handle
+    args <- return $ splitOn " " line
     broadcastTCP state line
     broadcastWS state line
 
   handshake :: forall a. ID -> a -> TVar (Map ID a) -> IO ()
-  handshake name handle clients = do
+  handshake name client clients = do
     atomically $ do
       clientMap <- readTVar clients
-      writeTVar clients $ Map.insert name handle clientMap
+      writeTVar clients $ Map.insert name client clientMap
 
-  handshakeWS :: ID -> EIO.Socket -> Server -> IO ()
+  handshakeWS :: String -> EIO.Socket -> Server -> IO ()
   handshakeWS name socket Server{wsClients=clients} = do
-    handshake name socket clients
+    handshake name client clients where
+      client = WSClient { wsSocket = socket }
 
-  handshakeTCP :: ID -> Handle -> Server -> IO ()
-  handshakeTCP name handle Server{tcpClients=clients} = do
-    handshake name handle clients
+  handshakeTCP :: [String] -> Handle -> Server -> IO ()
+  handshakeTCP args handle Server{tcpClients=clients} = do
+    handshake (args !! 1) client clients where
+      client = TCPClient { tcpHandle = handle }
 
-  sendMessageWS :: EIO.Socket -> String -> IO ()
-  sendMessageWS socket msg = atomically $ do
+  sendMessageWS :: WSClient -> String -> IO ()
+  sendMessageWS WSClient{wsSocket=socket} msg = atomically $ do
     EIO.send socket (EIO.TextPacket $ Text.pack msg)
 
-  sendMessageTCP :: Handle -> String -> IO ()
-  sendMessageTCP handle msg = hPutStrLn handle msg
+  sendMessageTCP :: TCPClient -> String -> IO ()
+  sendMessageTCP TCPClient{tcpHandle=handle} msg = hPutStrLn handle msg
 
   broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map ID a) -> String -> IO ()
   broadcast sendMessage clients msg = do
