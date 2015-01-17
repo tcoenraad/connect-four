@@ -20,3 +20,10 @@ module ConnectFour.Game where
                                                                      | otherwise = Nothing where
     b' = Board.dropCoin b (coin cp) i
     cp' = (cp + 1) `mod` ap
+
+  initalizeGame :: Game
+  initalizeGame = Game {
+                    board = [[],[],[],[],[],[],[]],
+                    currentPlayer = 0,
+                    amountPlayers = 2
+                  }

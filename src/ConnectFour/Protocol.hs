@@ -1,6 +1,6 @@
 module ConnectFour.Protocol where
 
-  import Debug.Trace
+  import qualified ConnectFour.Board as Board
 
   handshake :: [String] -> Bool
   handshake s = head s == "hello" && length s == 3
@@ -11,6 +11,12 @@ module ConnectFour.Protocol where
   gameStarted :: String
   gameStarted = "makeGame"
 
+  moveDone :: String
+  moveDone = "move"
+
+  move :: [String] -> Bool
+  move s = head s == "move" && length s == 2 && read (last s) < Board.rows
+
   true :: Char
   true = '1'
 
@@ -19,3 +25,6 @@ module ConnectFour.Protocol where
 
   errorUnknownCommand :: String
   errorUnknownCommand = "error invalidCommand"
+
+  errorInvalidMove :: String
+  errorInvalidMove = "error invalidMove"

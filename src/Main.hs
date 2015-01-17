@@ -31,7 +31,7 @@ module Main where
   newServer :: IO (ServerState)
   newServer = do
     q <- STM.newTVarIO Nothing
-    g <- STM.newTVarIO Map.empty
+    g <- STM.newTVarIO []
     tcp <- STM.newTVarIO Map.empty
     ws <- STM.newTVarIO Map.empty
     return ServerState { queue = q, games = g, tcpClients = tcp, wsClients = ws }
