@@ -5,6 +5,8 @@
 
 module ConnectFour.Server where
 
+  import Debug.Trace
+
   import Data.Map.Strict hiding (map)
   import Data.List.Split
 
@@ -24,6 +26,7 @@ module ConnectFour.Server where
   import qualified Network.EngineIO as EIO
 
   import qualified ConnectFour.Protocol as Protocol
+  import ConnectFour.Game
 
   type ID = String
   data TCPClient = TCPClient {
@@ -31,7 +34,7 @@ module ConnectFour.Server where
     tcpChat :: Bool,
     tcpChallenge :: Bool,
     tcpLeaderboard :: Bool
-  }
+  } deriving Show
   data WSClient = WSClient {
     wsSocket :: EIO.Socket,
     wsChat :: Bool,
@@ -39,19 +42,21 @@ module ConnectFour.Server where
     wsLeaderboard :: Bool
   }
 
-  data Server = Server {
+  data ServerState = ServerState {
+    queue :: TVar (Maybe TCPClient),
     tcpClients :: TVar (Map ID TCPClient),
-    wsClients :: TVar (Map ID WSClient)
+    wsClients :: TVar (Map ID WSClient),
+    games :: TVar (Map Int Game)
   }
 
-  nameInUse :: String -> Server -> IO (Bool)
-  nameInUse n Server{tcpClients=tcp, wsClients=ws} =
+  nameInUse :: String -> ServerState -> IO (Bool)
+  nameInUse n ServerState{tcpClients=tcp, wsClients=ws} =
     atomically $ do
       tcpClientMap <- readTVar tcp
       wsClientMap <- readTVar ws
       return $ or $ map (\name -> name == n) (Map.keys tcpClientMap ++ Map.keys wsClientMap)
 
-  handleSocketWS :: MonadIO m => Server -> EIO.Socket -> m EIO.SocketApp
+  handleSocketWS :: MonadIO m => ServerState -> EIO.Socket -> m EIO.SocketApp
   handleSocketWS state socket = do
     liftIO $ do
       uuid <- UUID.toString <$> UUID.nextRandom
@@ -62,36 +67,47 @@ module ConnectFour.Server where
     , EIO.saOnDisconnect = return ()
     }
 
-  processCommandWS :: EIO.Socket -> Server -> IO ()
+  processCommandWS :: EIO.Socket -> ServerState -> IO ()
   processCommandWS socket state = forever $ do 
     (EIO.TextPacket packet) <- liftIO $ atomically $ EIO.receive socket
     broadcastTCP state (Text.unpack packet)
     broadcastWS state (Text.unpack packet)
 
-  handleSocketTCP :: Server -> Socket -> IO ()
+  handleSocketTCP :: ServerState -> Socket -> IO ()
   handleSocketTCP state socket = forever $ do
     (handle, _, _) <- accept socket
     hSetBuffering handle NoBuffering
+    forkIO $ processCommandTCP handle state
 
+  startGame :: [TCPClient] -> IO ()
+  startGame clients = do
+    mapM_ (\client -> sendMessageTCP client Protocol.gameStarted) clients
+
+  processCommandTCP :: Handle -> ServerState -> IO ()
+  processCommandTCP handle state@ServerState{queue=q} = do
     line <- hGetLine handle
     args <- return $ splitOn " " line
+
     case args of
-      (Protocol.handshake -> True) ->
-        do
-          handshake <- handshakeTCP args handle state
-          if handshake then do
-            _ <- forkIO $ processCommandTCP handle state
-            return ()
-          else
-            sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse
-      _ -> sendMessageTCP TCPClient{tcpHandle=handle} "First identify yourself!"
-
-  processCommandTCP :: Handle -> Server -> IO ()
-  processCommandTCP handle state = forever $ do
-    line <- hGetLine handle
-    args <- return $ splitOn " " line
-    broadcastTCP state line
-    broadcastWS state line
+      (Protocol.handshake -> True) -> do
+        maybeClient <- handshakeTCP args handle state
+        case maybeClient of
+          Just client -> do
+            forever $ do
+              line <- hGetLine handle
+              args <- return $ splitOn " " line
+              case args of
+                (Protocol.play -> True) -> do
+                  maybeQueuedClient <- readTVarIO q
+                  case maybeQueuedClient of
+                    Just queuedClient -> do
+                      atomically $ writeTVar q Nothing
+                      startGame [queuedClient, client]
+                    Nothing -> atomically $ writeTVar q (Just client)
+                _ ->
+                  sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
+          Nothing -> sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse -- handshake failed
+      _ -> sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- no initial handshake
 
   handshake :: forall a. ID -> a -> TVar (Map ID a) -> IO ()
   handshake name client clients = do
@@ -99,20 +115,20 @@ module ConnectFour.Server where
       clientMap <- readTVar clients
       writeTVar clients $ Map.insert name client clientMap
 
-  handshakeWS :: String -> EIO.Socket -> Server -> IO ()
-  handshakeWS name socket Server{wsClients=clients} = do
+  handshakeWS :: String -> EIO.Socket -> ServerState -> IO ()
+  handshakeWS name socket ServerState{wsClients=clients} = do
     handshake name client clients where
       client = WSClient { wsSocket = socket }
 
-  handshakeTCP :: [String] -> Handle -> Server -> IO (Bool)
-  handshakeTCP args handle s@Server{tcpClients=clients} = do
+  handshakeTCP :: [String] -> Handle -> ServerState -> IO (Maybe TCPClient)
+  handshakeTCP args handle s@ServerState{tcpClients=clients} = do
     name <- return $ args !! 1
     inUse <- nameInUse name s
     if inUse then do
-      return False
+      return Nothing
     else do
       handshake (args !! 1) client clients
-      return True
+      return $ Just client
         where
           client = TCPClient { tcpHandle = handle,
                                tcpChat = (args !! 2) !! 0 == Protocol.true,
@@ -131,8 +147,8 @@ module ConnectFour.Server where
     clientMap <- readTVarIO clients
     mapM_ (\socket -> sendMessage socket msg) (Map.elems clientMap)
 
-  broadcastWS :: Server -> String -> IO ()
-  broadcastWS Server{wsClients=clients} msg = broadcast sendMessageWS clients msg
+  broadcastWS :: ServerState -> String -> IO ()
+  broadcastWS ServerState{wsClients=clients} msg = broadcast sendMessageWS clients msg
 
-  broadcastTCP :: Server -> String -> IO ()
-  broadcastTCP Server{tcpClients=clients} msg = broadcast sendMessageTCP clients msg
+  broadcastTCP :: ServerState -> String -> IO ()
+  broadcastTCP ServerState{tcpClients=clients} msg = broadcast sendMessageTCP clients msg

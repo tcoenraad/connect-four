@@ -28,13 +28,15 @@ module Main where
     state <- newServer
     splitIO [mainWS state, mainTCP state]
 
-  newServer :: IO (Server)
+  newServer :: IO (ServerState)
   newServer = do
+    q <- STM.newTVarIO Nothing
+    g <- STM.newTVarIO Map.empty
     tcp <- STM.newTVarIO Map.empty
     ws <- STM.newTVarIO Map.empty
-    return Server { tcpClients = tcp, wsClients = ws }
+    return ServerState { queue = q, games = g, tcpClients = tcp, wsClients = ws }
 
-  mainWS :: Server -> IO ()
+  mainWS :: ServerState -> IO ()
   mainWS state = do
     eio <- EIO.initialize
     dataDir <- getDataDir
@@ -43,7 +45,7 @@ module Main where
                  , ("/", Snap.serveDirectory dataDir)
                  ]
 
-  mainTCP :: Server -> IO ()
+  mainTCP :: ServerState -> IO ()
   mainTCP state = do
     sock <- listenOn $ PortNumber 8001
     handleSocketTCP state sock
