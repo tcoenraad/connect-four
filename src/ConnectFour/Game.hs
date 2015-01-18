@@ -7,7 +7,7 @@ module ConnectFour.Game where
     board :: Board.Board,
     currentPlayer :: Int,
     amountPlayers :: Int
-  }
+  } deriving (Eq, Show)
 
   coin :: Int -> Board.Coin
   coin 0 = Board.Red

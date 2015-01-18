@@ -1,5 +1,6 @@
 module ConnectFour.Protocol where
 
+  import Data.Typeable
   import qualified ConnectFour.Board as Board
 
   handshake :: [String] -> Bool
@@ -12,10 +13,12 @@ module ConnectFour.Protocol where
   gameStarted = "makeGame"
 
   moveDone :: String
-  moveDone = "move"
+  moveDone = "makeMove"
 
   move :: [String] -> Bool
-  move s = head s == "move" && length s == 2 && read (last s) < Board.rows
+  move s = head s == "move" && length s == 2 && r /= [] && row > 0 && row < Board.rows where
+    r = reads (last s) :: [(Int, String)]
+    row = fst $ head r
 
   true :: Char
   true = '1'
