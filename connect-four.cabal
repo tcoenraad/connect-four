@@ -17,6 +17,7 @@ Executable server
     containers,
     engine-io,
     engine-io-snap,
+    hspec,
     mtl,
     network,
     snap-core,
