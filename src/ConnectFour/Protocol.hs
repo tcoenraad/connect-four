@@ -1,6 +1,5 @@
 module ConnectFour.Protocol where
 
-  import Data.Typeable
   import qualified ConnectFour.Board as Board
 
   handshake :: [String] -> Bool
