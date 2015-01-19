@@ -21,6 +21,9 @@ module ConnectFour.Game where
     b' = Board.dropCoin b (coin cp) i
     cp' = (cp + 1) `mod` ap
 
+  winningColumn :: Game -> Int -> Bool
+  winningColumn Game{board=b} x = Board.winningColumn b x
+
   initalizeGame :: Game
   initalizeGame = Game {
                     board = [[],[],[],[],[],[],[]],

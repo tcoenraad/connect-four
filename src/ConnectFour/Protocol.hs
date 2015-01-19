@@ -8,14 +8,20 @@ module ConnectFour.Protocol where
   play :: [String] -> Bool
   play s = head s == "play" && length s == 1
 
+  ack :: String
+  ack = "hello"
+
   gameStarted :: String
   gameStarted = "makeGame"
 
   moveDone :: String
   moveDone = "makeMove"
 
+  gameOver :: String
+  gameOver = "gameOver"
+
   move :: [String] -> Bool
-  move s = head s == "move" && length s == 2 && r /= [] && row > 0 && row < Board.rows where
+  move s = head s == "move" && length s == 2 && r /= [] && row >= 0 && row < Board.columns where
     r = reads (last s) :: [(Int, String)]
     row = fst $ head r
 

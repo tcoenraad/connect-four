@@ -131,15 +131,23 @@ module ConnectFour.Server where
           maybeGame <- return $ Game.dropCoin game row
           case maybeGame of
             Just game -> do
-              atomically $ writeTVar g game
               clients <- return $ serverGameToClients serverGame
+              atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
-            Nothing ->
+              if Game.winningColumn game row then do
+                mapM_ (\client@TCPClient{tcpName=n} -> sendMessageTCP client (Protocol.gameOver ++ " " ++ n)) clients
+                -- and clean up
+              else do
+                atomically $ writeTVar g game
+            Nothing ->              
               sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
+              -- and clean-up
         else
           sendMessageTCP client Protocol.errorInvalidMove -- not clients' turn
+          -- and clean-up
       Nothing -> do
         sendMessageTCP client Protocol.errorInvalidMove -- no game found
+        -- and clean-up
 
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
@@ -151,6 +159,7 @@ module ConnectFour.Server where
         maybeClient <- handshakeTCP args handle state
         case maybeClient of
           Just client -> do
+            sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
             forever $ do
               line <- hGetLine handle
               args <- return $ splitOn " " line
