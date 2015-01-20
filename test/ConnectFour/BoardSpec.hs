@@ -57,12 +57,18 @@ module ConnectFour.BoardSpec where
         it "should detect a horizontal strike on the end" $ do
           winningColumn [[Yellow],[Yellow],[Yellow],[Yellow],[],[],[]] 3 `shouldBe` True
 
+        it "should detect a not long enough horizontal strike" $ do
+          winningColumn [[Yellow],[Yellow],[Yellow],[],[],[],[]] 1 `shouldBe` False
+
         it "should detect a not connected horizontal strike" $ do
           winningColumn [[Yellow],[Yellow],[],[Yellow],[Yellow],[],[]] 1 `shouldBe` False
 
       context "when winning moves on board are made vertically" $ do
         it "should detect a vertical strike on the end" $ do
           winningColumn [[Yellow,Yellow,Yellow,Yellow],[],[],[],[],[],[]] 0 `shouldBe` True
+
+        it "should detect a not long enough horizontal strike" $ do
+          winningColumn [[Yellow,Yellow,Yellow],[],[],[],[],[],[]] 0 `shouldBe` False
 
         it "should detect a not connected vertical strike" $ do
           winningColumn [[Yellow,Yellow,Empty,Yellow,Yellow],[],[],[],[],[],[]] 0 `shouldBe` False
@@ -78,6 +84,9 @@ module ConnectFour.BoardSpec where
         it "should detect an increasing diagonal strike on the end" $ do
           winningColumn [[Yellow],[Yellow],[Yellow],[Yellow],[],[],[]] 3 `shouldBe` True
 
+        it "should detect a not long enough increasing diagonal strike" $ do
+          winningColumn [[Yellow],[Empty,Yellow],[Empty,Empty,Yellow],[],[],[],[]] 1 `shouldBe` False
+
         it "should detect a not connected increasing diagonal strike" $ do
           winningColumn [[Yellow],[Empty,Yellow],[],[Empty,Empty,Empty,Yellow],[Empty,Empty,Empty,Empty,Yellow],[],[]] 1 `shouldBe` False
 
@@ -89,6 +98,9 @@ module ConnectFour.BoardSpec where
 
         it "should detect an decreasing diagonal strike on the end" $ do
           winningColumn [[Empty,Empty,Empty,Yellow],[Empty,Empty,Yellow],[Empty,Yellow],[Yellow],[],[],[]] 3 `shouldBe` True
+
+        it "should detect a not long enough decreasing diagonal strike" $ do
+          winningColumn [[Empty,Empty,Yellow],[Empty,Yellow],[Yellow],[],[],[],[]] 1 `shouldBe` False
 
         it "should detect a not connected decreasing diagonal strike" $ do
           winningColumn [[Empty,Empty,Empty,Empty,Yellow],[Empty,Empty,Empty,Yellow],[],[Empty,Yellow],[Yellow],[],[]] 1 `shouldBe` False

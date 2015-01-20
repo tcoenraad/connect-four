@@ -34,10 +34,10 @@ module ConnectFour.Board where
                       y = length (b !! x) - 1
 
   winningPos :: Board -> Pos -> Bool
-  winningPos b (x, y) = west + east >= strike
-                      || south >= strike
-                      || southwest + northeast >= strike
-                      || northwest + southeast >= strike
+  winningPos b (x, y) = south >= strike
+                      || west + east - 1 >= strike
+                      || southwest + northeast - 1 >= strike
+                      || northwest + southeast - 1 >= strike
     where
       west = consecutiveCoinsLength b (x, y) (-1, 0) 0
       east = consecutiveCoinsLength b (x, y) (1, 0) 0
