@@ -114,14 +114,17 @@ module ConnectFour.Server where
     maybeQueuedClient <- readTVarIO q
     case maybeQueuedClient of
       Just queuedClient -> do
-        atomically $ writeTVar q Nothing
-        clients <- return [queuedClient, client]
-        newGame <- newTVarIO initalizeGame
-        game <- return ServerGame{ players = clients, game = newGame }
-        atomically $ do
-          games <- readTVar gs
-          writeTVar gs $ games ++ [game]
-        mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
+        if queuedClient == client then
+          return ()
+        else do
+          atomically $ writeTVar q Nothing
+          clients <- return [queuedClient, client]
+          newGame <- newTVarIO initalizeGame
+          game <- return ServerGame{ players = clients, game = newGame }
+          atomically $ do
+            games <- readTVar gs
+            writeTVar gs $ games ++ [game]
+          mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
       Nothing -> do
         atomically $ writeTVar q (Just client)
         return ()
