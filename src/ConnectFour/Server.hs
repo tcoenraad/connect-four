@@ -84,7 +84,7 @@ module ConnectFour.Server where
     atomically $ do
       tcpClientMap <- readTVar tcp
       wsClientMap <- readTVar ws
-      return $ or $ map (\name -> name == n) (Map.keys tcpClientMap ++ Map.keys wsClientMap)
+      return $ any (\name -> name == n) (Map.keys tcpClientMap ++ Map.keys wsClientMap)
 
   handleSocketWS :: MonadIO m => ServerState -> EIO.Socket -> m EIO.SocketApp
   handleSocketWS state socket = do
@@ -145,10 +145,10 @@ module ConnectFour.Server where
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
               if Game.winningColumn game row then do
-                mapM_ (\client@TCPClient{tcpName=n} -> sendMessageTCP client (Protocol.gameOver ++ " " ++ n)) clients
+                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ name)) clients
                 -- and clean-up
                 atomically $ writeTVar connected False
-                cleanup client state
+                shutdownServerGame serverGame state
               else do
                 atomically $ writeTVar g game
             Nothing -> do
@@ -181,14 +181,16 @@ module ConnectFour.Server where
     serverGames <- readTVarIO gs
     maybeServerGame <- return $ findServerGame name serverGames
     case maybeServerGame of
-      Just serverGame -> do
-        atomically $ writeTVar gs (serverGames \\ [serverGame])
-        shutdownServerGame serverGame
+      Just serverGame@ServerGame{players=ps} -> do
+        mapM_ (\client -> sendMessageTCP client (Protocol.errorInvalidMove)) ps
+        shutdownServerGame serverGame state
       _ -> return ()
     hClose handle
 
-  shutdownServerGame :: ServerGame -> IO ()
-  shutdownServerGame ServerGame{players=ps} = mapM_ (\client@TCPClient{tcpName=n} -> sendMessageTCP client (Protocol.errorInvalidMove)) ps
+  shutdownServerGame :: ServerGame -> ServerState -> IO ()
+  shutdownServerGame serverGame ServerState{games=gs} = do
+    serverGames <- readTVarIO gs
+    atomically $ writeTVar gs (serverGames \\ [serverGame])
 
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
