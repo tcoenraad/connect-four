@@ -18,7 +18,7 @@ module ConnectFour.Server where
   import Control.Monad (forever, when)
 
   import Network (accept, Socket)
-  import System.IO (hSetBuffering, hGetLine, hPutStrLn, BufferMode (..), Handle)
+  import System.IO (hSetBuffering, hGetLine, hPutStrLn, hClose, BufferMode (..), Handle)
 
   import qualified Data.Map as Map
   import qualified Data.Text as Text
@@ -165,7 +165,7 @@ module ConnectFour.Server where
         cleanup client state
 
   cleanup :: TCPClient -> ServerState -> IO ()
-  cleanup client@TCPClient{tcpName=name} state@ServerState{tcpClients=tcpCs, queue=q, games=gs} = do
+  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, games=gs} = do
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
     queue <- readTVarIO q
@@ -180,8 +180,12 @@ module ConnectFour.Server where
     case maybeServerGame of
       Just serverGame -> do
         atomically $ writeTVar gs (serverGames \\ [serverGame])
-        -- shutdown game
+        shutdownServerGame serverGame
       _ -> return ()
+    hClose handle
+
+  shutdownServerGame :: ServerGame -> IO ()
+  shutdownServerGame ServerGame{players=ps} = mapM_ (\client@TCPClient{tcpName=n} -> sendMessageTCP client (Protocol.errorInvalidMove)) ps
 
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
