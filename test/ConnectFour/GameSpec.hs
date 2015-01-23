@@ -4,7 +4,7 @@ module ConnectFour.GameSpec where
   import Data.Maybe
 
   import ConnectFour.Game
-  import ConnectFour.Board hiding (dropCoin)
+  import ConnectFour.Board hiding (dropCoin, winningColumn)
 
   emptyBoard :: Board
   emptyBoard = [[],[],[],[],[],[],[]]
@@ -42,3 +42,17 @@ module ConnectFour.GameSpec where
           let g'''' = fromJust $ dropCoin g''' 3
           let Game { board=board' } = fromJust $ dropCoin g'''' 4
           board' `shouldBe` [[Red],[Green],[Blue],[Yellow],[Red],[],[]]
+
+      context "when doing a winning move" $ do
+
+        it "should detect a winning column" $ do
+          let g = Game { board = emptyBoard, amountPlayers = 2, currentPlayer = 0 }
+          let g' = fromJust $ dropCoin g 0
+          let g'' = fromJust $ dropCoin g' 1
+          let g''' = fromJust $ dropCoin g'' 0
+          let g'''' = fromJust $ dropCoin g''' 1
+          let g''''' = fromJust $ dropCoin g'''' 0
+          let g'''''' = fromJust $ dropCoin g''''' 1
+          let g''''''' = fromJust $ dropCoin g'''''' 0
+          winningColumn g'''''' 0 `shouldBe` False
+          winningColumn g''''''' 0 `shouldBe` True
