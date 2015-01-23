@@ -8,6 +8,17 @@ module ConnectFour.Protocol where
   play :: [String] -> Bool
   play s = head s == "play" && length s == 1
 
+  move :: [String] -> Bool
+  move s = head s == "move" && length s == 2 && r /= [] && row >= 0 && row < Board.columns where
+    r = reads (last s) :: [(Int, String)]
+    row = fst $ head r
+
+  true :: String
+  true = "true"
+
+  false :: String
+  false = "false"
+
   ack :: String
   ack = "hello"
 
@@ -20,13 +31,8 @@ module ConnectFour.Protocol where
   gameOver :: String
   gameOver = "gameOver"
 
-  move :: [String] -> Bool
-  move s = head s == "move" && length s == 2 && r /= [] && row >= 0 && row < Board.columns where
-    r = reads (last s) :: [(Int, String)]
-    row = fst $ head r
-
-  true :: Char
-  true = '1'
+  boolTrue :: Char
+  boolTrue = '1'
 
   errorNameInUse :: String
   errorNameInUse = "error invalidName"

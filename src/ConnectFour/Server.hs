@@ -145,12 +145,17 @@ module ConnectFour.Server where
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
               if Game.winningColumn game row then do
-                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ name)) clients
+                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.false ++ name)) clients
+                -- and clean-up
+                atomically $ writeTVar connected False
+                shutdownServerGame serverGame state
+              else if Game.fullBoard game then do
+                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
                 -- and clean-up
                 atomically $ writeTVar connected False
                 shutdownServerGame serverGame state
               else do
-                atomically $ writeTVar g game
+                return ()
             Nothing -> do
               sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
               -- and clean-up
@@ -244,9 +249,9 @@ module ConnectFour.Server where
         where
           client = TCPClient { tcpName = args !! 1,
                                tcpHandle = handle,
-                               tcpChat = (args !! 2) !! 0 == Protocol.true,
-                               tcpChallenge = (args !! 2) !! 1 == Protocol.true,
-                               tcpLeaderboard = (args !! 2) !! 2 == Protocol.true }
+                               tcpChat = (args !! 2) !! 0 == Protocol.boolTrue,
+                               tcpChallenge = (args !! 2) !! 1 == Protocol.boolTrue,
+                               tcpLeaderboard = (args !! 2) !! 2 == Protocol.boolTrue }
 
   sendMessageWS :: WSClient -> String -> IO ()
   sendMessageWS WSClient{wsSocket=socket} msg = atomically $ do

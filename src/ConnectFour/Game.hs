@@ -24,6 +24,9 @@ module ConnectFour.Game where
   winningColumn :: Game -> Int -> Bool
   winningColumn Game{board=b} x = Board.winningColumn b x
 
+  fullBoard :: Game -> Bool
+  fullBoard Game{board=b} = Board.full b
+
   initalizeGame :: Game
   initalizeGame = Game {
                     board = [[],[],[],[],[],[],[]],
