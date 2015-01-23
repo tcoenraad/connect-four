@@ -28,6 +28,10 @@ module ConnectFour.Board where
                     where
                       column = b !! i
 
+  full :: Board -> Bool
+  full [] = True
+  full (c:cs) = length c == rows && full cs
+
   winningColumn :: Board -> Int -> Bool
   winningColumn b x = winningPos b (x, y)
                     where

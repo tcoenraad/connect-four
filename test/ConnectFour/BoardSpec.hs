@@ -104,3 +104,13 @@ module ConnectFour.BoardSpec where
 
         it "should detect a not connected decreasing diagonal strike" $ do
           winningColumn [[Empty,Empty,Empty,Empty,Yellow],[Empty,Empty,Empty,Yellow],[],[Empty,Yellow],[Yellow],[],[]] 1 `shouldBe` False
+
+      context "when board is about to be full" $ do
+
+        it "should detect an almost full board to be not full" $ do
+          let fullColumn = [Yellow,Yellow,Yellow,Yellow,Yellow,Yellow]
+          full [fullColumn,fullColumn,fullColumn,fullColumn,fullColumn,take 5 fullColumn] `shouldBe` False
+
+        it "should detect an almost full board to be not full" $ do
+          let fullColumn = [Yellow,Yellow,Yellow,Yellow,Yellow,Yellow]
+          full [fullColumn,fullColumn,fullColumn,fullColumn,fullColumn,fullColumn] `shouldBe` True
