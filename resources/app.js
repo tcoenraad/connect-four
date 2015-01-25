@@ -57,9 +57,13 @@ $(function() {
         var $board = $('<div>').addClass('board').appendTo($game);
         board.forEach(function(column) {
           var $column = $('<div>').appendTo($board);
-          column.forEach(function(field) {
-            $('<span/>').addClass(field.toLowerCase()).appendTo($column);
-          });
+          if ($.isEmptyObject(column)) {
+            $('<span/>').appendTo($column);
+          } else {
+            column.forEach(function(field) {
+              $('<span/>').addClass(field.toLowerCase()).appendTo($column);
+            });
+          }
         });
         $games.append($game);
       });
