@@ -6,7 +6,7 @@
 
 module ConnectFour.Server where
 
-  import Debug.Trace
+  -- import Debug.Trace
 
   import Data.Aeson ((.=))
   import Data.Map.Strict hiding (map, (\\))
@@ -72,9 +72,7 @@ module ConnectFour.Server where
     broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ jsonObject
 
   pushUpdateAll :: ServerState -> IO ()
-  pushUpdateAll state@ServerState{queue=q, tcpClients=tcpCs, wsClients=wsClients, games=gs} = do
-    queue <- readTVarIO q
-    -- pushUpdateQueue queue
+  pushUpdateAll state = do
     pushUpdateTCPClients state
     pushUpdateGames state
 
@@ -152,7 +150,7 @@ module ConnectFour.Server where
     forkIO $ processCommandTCP handle state
 
   playCommand :: TCPClient -> ServerState -> IO ()
-  playCommand client ServerState{queue=q, games=gs, tcpClients=tcpCs} = do
+  playCommand client state@ServerState{queue=q, games=gs, tcpClients=tcpCs} = do
     maybeQueuedClient <- readTVarIO q
     case maybeQueuedClient of
       Just queuedClient -> do
@@ -167,6 +165,7 @@ module ConnectFour.Server where
             games <- readTVar gs
             writeTVar gs $ games ++ [game]
           mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
+          pushUpdateGames state
       Nothing -> do
         atomically $ writeTVar q (Just client)
         return ()
