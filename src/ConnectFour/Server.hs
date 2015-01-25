@@ -115,7 +115,6 @@ module ConnectFour.Server where
       return $ Aeson.toJSON (tcpCs, game)
       ) serverGames
     pushUpdate state $ Aeson.object ["serverGames" .= (Aeson.toJSON games)]
-    return ()
 
   nameInUse :: String -> ServerState -> IO (Bool)
   nameInUse n ServerState{tcpClients=tcp, wsClients=ws} =
@@ -220,14 +219,15 @@ module ConnectFour.Server where
               clients <- return $ serverGameToClients serverGame
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
+              pushUpdateGames state
               if Game.winningColumn game row then do
-                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.false ++ name)) clients
+                mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.false ++ " " ++ name)) clients
                 shutdownServerGame serverGame state
               else if Game.fullBoard game then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
                 shutdownServerGame serverGame state
               else do
-                pushUpdateGames state
+                return ()
             Nothing -> do
               sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
               cleanup client state
