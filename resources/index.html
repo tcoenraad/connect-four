@@ -1,9 +1,50 @@
 <html>
   <head>
-    <script src="engine.io.js"></script>
-    <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+    <title>Connect Four Monitor</title>
+    <script src="/bower_components/bootstrap/dist/js/bootstrap.js"></script>
+    <script src="/bower_components/engine.io-client/engine.io.js"></script>
+    <script src="/bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="/bower_components/moment/min/moment.min.js"></script>
+    <script src="/bower_components/sprintf/dist/sprintf.min.js"></script>
     <script src="app.js"></script>
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap.css" />
   </head>
   <body>
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+            <span class="sr-only">Toggle navigation</span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">Connect Four Monitor</a>
+        </div>
+        <div class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+            <li><a href="#">Dashboard</a></li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 sidebar">
+          <section>
+            <h1>Clients</h1>
+            <p id="clients"></span>
+          </section>
+        </div>
+        <div class="col-sm-9">
+          <section>
+            <h1>Server log</h1>
+            <pre id="log"></pre>
+          </section>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
