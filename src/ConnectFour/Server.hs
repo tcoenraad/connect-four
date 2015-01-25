@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -7,6 +8,7 @@ module ConnectFour.Server where
 
   import Debug.Trace
 
+  import Data.Aeson ((.=))
   import Data.Map.Strict hiding (map, (\\))
   import Data.List.Split
   import Data.List
@@ -14,14 +16,19 @@ module ConnectFour.Server where
   import Control.Applicative
   import Control.Concurrent (forkIO)
   import Control.Concurrent.STM
-  import Control.Monad.IO.Class (MonadIO, liftIO)
   import Control.Monad (forever, when)
+  import Control.Monad.IO.Class (MonadIO, liftIO)
+
+  import GHC.Generics
 
   import Network (accept, Socket)
   import System.IO (hSetBuffering, hGetLine, hPutStrLn, hClose, BufferMode (..), Handle)
 
+  import qualified Data.Aeson as Aeson
+  import qualified Data.ByteString.Lazy as BSL
   import qualified Data.Map as Map
   import qualified Data.Text as Text
+  import qualified Data.Text.Encoding as Text
   import qualified Data.UUID as UUID
   import qualified Data.UUID.V4 as UUID
   import qualified Network.EngineIO as EIO
@@ -29,14 +36,18 @@ module ConnectFour.Server where
   import qualified ConnectFour.Protocol as Protocol
   import ConnectFour.Game as Game
 
-  type Name = String
   data TCPClient = TCPClient {
-    tcpName :: Name,
+    tcpName :: String,
     tcpHandle :: Handle,
     tcpChat :: Bool,
     tcpChallenge :: Bool,
     tcpLeaderboard :: Bool
   } deriving (Eq, Show)
+
+  instance Aeson.ToJSON TCPClient where
+    toJSON (TCPClient{tcpName=name}) =
+      Aeson.object [ "name" .= name
+               ]
 
   data WSClient = WSClient {
     wsSocket :: EIO.Socket,
@@ -47,8 +58,8 @@ module ConnectFour.Server where
 
   data ServerState = ServerState {
     queue :: TVar (Maybe TCPClient),
-    tcpClients :: TVar (Map Name TCPClient),
-    wsClients :: TVar (Map Name WSClient),
+    tcpClients :: TVar (Map String TCPClient),
+    wsClients :: TVar (Map String WSClient),
     games :: TVar [ServerGame]
   }
 
@@ -56,6 +67,23 @@ module ConnectFour.Server where
     game :: TVar Game,
     players :: [TCPClient]
   } deriving (Eq)
+
+  pushUpdate :: ServerState -> IO ()
+  pushUpdate state@ServerState{queue=q, tcpClients=tcpCs, wsClients=wsClients, games=gs} = do
+    queue <- readTVarIO q
+    -- pushUpdateQueue queue
+    pushUpdateTCPClients state
+    -- games <- readTVarIO gs
+    -- pushUpdateGames games
+
+  pushUpdateLog :: String -> String -> ServerState -> IO ()
+  pushUpdateLog name msg state =
+    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ Aeson.object ["log" .= Aeson.object [(Text.pack name) .= msg]]
+
+  pushUpdateTCPClients :: ServerState -> IO ()
+  pushUpdateTCPClients state@ServerState{tcpClients=tcpCs} = do
+    tcpClients <- Map.elems <$> readTVarIO tcpCs
+    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ Aeson.object ["clients" .= (Aeson.toJSON tcpClients)]
 
   whileM :: (Monad m) => m Bool -> m a -> m ()
   whileM cond body = do c <- cond
@@ -99,9 +127,11 @@ module ConnectFour.Server where
 
   processCommandWS :: EIO.Socket -> ServerState -> IO ()
   processCommandWS socket state = forever $ do 
-    (EIO.TextPacket packet) <- liftIO $ atomically $ EIO.receive socket
-    broadcastTCP state (Text.unpack packet)
-    broadcastWS state (Text.unpack packet)
+    (EIO.TextPacket packet) <- atomically $ EIO.receive socket
+    arg <- return $ Text.unpack packet
+    case arg of
+      "connected" -> pushUpdate state
+      _ -> return ()
 
   handleSocketTCP :: ServerState -> Socket -> IO ()
   handleSocketTCP state socket = forever $ do
@@ -200,17 +230,20 @@ module ConnectFour.Server where
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
     line <- hGetLine handle
+    pushUpdateLog "<unknown>" line state 
     args <- return $ splitOn " " line
 
     case args of
       (Protocol.handshake -> True) -> do
         maybeClient <- handshakeTCP args handle state
         case maybeClient of
-          Just client -> do
+          Just client@TCPClient{tcpName=name} -> do
             sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
             connected <- newTVarIO True
             whileM (readTVarIO connected) $ do
               line <- hGetLine handle
+              pushUpdateLog name line state
+
               args <- return $ splitOn " " line
               case args of
                 (Protocol.play -> True) -> do
@@ -226,11 +259,11 @@ module ConnectFour.Server where
       _ -> do
         sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- no initial handshake
 
-  handshake :: forall a. Name -> a -> TVar (Map Name a) -> IO ()
-  handshake name client clients = do
+  handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
+  handshake name client cs = do
     atomically $ do
-      clientMap <- readTVar clients
-      writeTVar clients $ Map.insert name client clientMap
+      clients <- readTVar cs
+      writeTVar cs $ Map.insert name client clients
 
   handshakeWS :: String -> EIO.Socket -> ServerState -> IO ()
   handshakeWS name socket ServerState{wsClients=clients} = do
@@ -238,13 +271,14 @@ module ConnectFour.Server where
       client = WSClient { wsSocket = socket }
 
   handshakeTCP :: [String] -> Handle -> ServerState -> IO (Maybe TCPClient)
-  handshakeTCP args handle s@ServerState{tcpClients=clients} = do
+  handshakeTCP args handle state@ServerState{tcpClients=clients} = do
     name <- return $ args !! 1
-    inUse <- nameInUse name s
+    inUse <- nameInUse name state
     if inUse then do
       return Nothing
     else do
       handshake (args !! 1) client clients
+      pushUpdateTCPClients state
       return $ Just client
         where
           client = TCPClient { tcpName = args !! 1,
@@ -260,7 +294,7 @@ module ConnectFour.Server where
   sendMessageTCP :: TCPClient -> String -> IO ()
   sendMessageTCP TCPClient{tcpHandle=handle} msg = hPutStrLn handle msg
 
-  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map Name a) -> String -> IO ()
+  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map String a) -> String -> IO ()
   broadcast sendMessage clients msg = do
     clientMap <- readTVarIO clients
     mapM_ (\socket -> sendMessage socket msg) (Map.elems clientMap)
