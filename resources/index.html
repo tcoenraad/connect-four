@@ -1,14 +1,9 @@
 <html>
   <head>
     <title>Connect Four Monitor</title>
-    <script src="/bower_components/bootstrap/dist/js/bootstrap.js"></script>
-    <script src="/bower_components/engine.io-client/engine.io.js"></script>
-    <script src="/bower_components/jquery/dist/jquery.min.js"></script>
-    <script src="/bower_components/moment/min/moment.min.js"></script>
-    <script src="/bower_components/sprintf/dist/sprintf.min.js"></script>
-    <script src="app.js"></script>
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
   </head>
   <body>
     <nav class="navbar navbar-inverse navbar-fixed-top">
@@ -22,9 +17,11 @@
           </button>
           <a class="navbar-brand" href="#">Connect Four Monitor</a>
         </div>
-        <div class="navbar-collapse collapse">
+        <div id="navbar" class="navbar-collapse collapse">
           <ul class="nav navbar-nav navbar-right">
-            <li><a href="#">Dashboard</a></li>
+            <li><a href="#clients">Clients</a></li>
+            <li><a href="#server-log">Server log</a></li>
+            <li><a href="#games">Games</a></li>
           </ul>
         </div>
       </div>
@@ -34,17 +31,30 @@
       <div class="row">
         <div class="col-sm-3 sidebar">
           <section>
+            <a name="clients"></a>
             <h1>Clients</h1>
             <ul id="clients"></ul>
           </section>
         </div>
-        <div class="col-sm-9">
+        <div class="col-sm-9 main">
           <section>
+            <a name="server-log"></a>
             <h1>Server log</h1>
             <pre id="log"></pre>
+          </section>
+          <section>
+            <a name="games"></a>
+            <h1>Games</h1>
+            <div id="games"></div>
           </section>
         </div>
       </div>
     </div>
+    <script src="/bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="/bower_components/bootstrap/dist/js/bootstrap.js"></script>
+    <script src="/bower_components/engine.io-client/engine.io.js"></script>
+    <script src="/bower_components/moment/min/moment.min.js"></script>
+    <script src="/bower_components/sprintf/dist/sprintf.min.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

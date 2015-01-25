@@ -94,7 +94,7 @@ module ConnectFour.Server where
       game <- readTVarIO g
       return $ Aeson.toJSON (tcpCs, game)
       ) serverGames
-    pushUpdate state $ Aeson.object ["games" .= (Aeson.toJSON games)]
+    pushUpdate state $ Aeson.object ["serverGames" .= (Aeson.toJSON games)]
     return ()
 
   whileM :: (Monad m) => m Bool -> m a -> m ()
@@ -197,7 +197,7 @@ module ConnectFour.Server where
                 atomically $ writeTVar connected False
                 shutdownServerGame serverGame state
               else do
-                return ()
+                pushUpdateGames state
             Nothing -> do
               sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
               -- and clean-up

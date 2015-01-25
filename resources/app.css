@@ -1,11 +1,53 @@
-/** http://www.colourlovers.com/palette/2727383/Lunar_Kiss
+/** http://www.colourlovers.com/palette/1066560/happy_twentyten!
  */
 
 body {
   padding-top: 50px;
 }
 
-.sidebar {
-  border-right: 5px solid #D11E48;
-  height: 100%;
+h1 {
+  padding: 5px;
+  border-left: 5px solid #D11E48;
+}
+
+#log {
+  height: 200px;
+  text-overflow: scroll;
+}
+
+.game {
+  float: left;
+  background: #410936;
+  color: white;
+  margin: 10px;
+}
+
+.board {
+  background: white;
+  transform: rotate(-90deg);
+  height: 280px;
+  width: 240px;
+  padding: 2px;
+  margin: 40px;
+}
+
+.board div {
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+}
+.board span {
+  width: 40px;
+  height: 40px;
+  margin: 2px;
+  border-radius: 20px;
+  display: block;
+}
+
+.red {
+  background: #E46F0A;
+}
+
+.green {
+  background: #A40B54;
 }
