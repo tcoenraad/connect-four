@@ -1,13 +1,17 @@
 /** http://www.colourlovers.com/palette/1066560/happy_twentyten!
  */
 
-body {
-  padding-top: 50px;
-}
-
 h1 {
   padding: 5px;
   border-left: 5px solid #D11E48;
+}
+
+h2 {
+  padding: 5px;
+}
+
+.navbar {
+  margin-bottom: auto;
 }
 
 #log {
@@ -28,7 +32,7 @@ h1 {
   height: 280px;
   width: 240px;
   padding: 2px;
-  margin: 40px;
+  margin: 0 40px;
 }
 
 .board div {
