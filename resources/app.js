@@ -38,16 +38,21 @@ $(function() {
       var $games = $('#games');
       $games.empty();
       serverGames.forEach(function(serverGame) {
+        var clients = serverGame[0];
+        var game = serverGame[1];
+
         var $game = $('<div>').addClass('game');
         $game.append($('<h2/>').text('Player list'));
         var $playerList = $('<ul>').addClass('player-list').appendTo($game);
 
-        var clients = serverGame[0];
-        Object.keys(clients).map(function (key) {
-          $('<li/>').text(clients[key].name).appendTo($playerList);
+        Object.keys(clients).map(function (key, i) {
+          var name = $('<li/>').text(clients[key].name);
+          if (i == game.currentPlayer) {
+            name.addClass('current-player');
+          }
+          name.appendTo($playerList);
         });
 
-        var game = serverGame[1];
         var board = game.board;
         var $board = $('<div>').addClass('board').appendTo($game);
         board.forEach(function(column) {

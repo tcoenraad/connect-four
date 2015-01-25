@@ -26,6 +26,10 @@ h2 {
   margin: 10px;
 }
 
+.current-player {
+  font-style: italic;
+}
+
 .board {
   background: white;
   transform: rotate(-90deg);
