@@ -12,17 +12,20 @@ $(function() {
   socket.on('message', function(msg) {
     var parsedMessage = $.parseJSON(msg);
     if ("clients" in parsedMessage) {
-      clients = parsedMessage.clients;
-      names = Object.keys(clients).map(function (key) {
+      var clients = parsedMessage.clients;
+      var names = Object.keys(clients).map(function (key) {
         return clients[key].name;
       });
-      $("#clients").text(names.join(', '));
+      $clients = $("#clients");
+      $clients.empty();
+      $.each(names, function(i) {
+        var li = $('<li/>').text(names[i]).appendTo($clients);
+      });
     }
-    if ("log" in parsedMessage) {
-      log = parsedMessage.log;
-      date = new Date();
-      name = Object.keys(log)[0];
-      console.log(name);
+    else if ("log" in parsedMessage) {
+      var log = parsedMessage.log;
+      var date = new Date();
+      var name = Object.keys(log)[0];
       $('#log').append(htmlEncode(sprintf("[%s] %s: `%s`", moment().format(), name, log[name])) + "<br/>");
     }
   });
