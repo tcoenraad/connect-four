@@ -42,6 +42,7 @@ module Main where
     dataDir <- getDataDir
     Snap.quickHttpServe $
       Snap.route [ ("/engine.io", EIO.handler eio (handleSocketWS state) EIOSnap.snapAPI)
+                 , ("/bower_components", Snap.serveDirectory "bower_components")
                  , ("/", Snap.serveDirectory dataDir)
                  ]
 

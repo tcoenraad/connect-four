@@ -1,6 +1,9 @@
 {
   "name": "connect-four",
   "dependencies": {
-    "socket.io-client": "~1.2.1"
+    "bootstrap": "~3.3.2",
+    "engine.io-client": "~1.2.1",
+    "moment": "~2.9.0",
+    "sprintf": "~1.0.2"
   }
 }
