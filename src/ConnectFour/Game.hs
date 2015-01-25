@@ -1,13 +1,20 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module ConnectFour.Game where
 
   import Data.Maybe
+  import GHC.Generics
+
   import qualified ConnectFour.Board as Board
+  import qualified Data.Aeson as Aeson
 
   data Game = Game {
     board :: Board.Board,
     currentPlayer :: Int,
     amountPlayers :: Int
-  } deriving (Eq, Show)
+  } deriving (Eq, Generic, Show)
+
+  instance Aeson.ToJSON Game
 
   coin :: Int -> Board.Coin
   coin 0 = Board.Red

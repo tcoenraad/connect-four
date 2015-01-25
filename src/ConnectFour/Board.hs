@@ -1,6 +1,14 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module ConnectFour.Board where
 
-  data Coin = Red | Green | Blue | Yellow | Empty deriving (Eq, Show)
+  import GHC.Generics
+
+  import qualified Data.Aeson as Aeson
+
+  data Coin = Red | Green | Blue | Yellow | Empty deriving (Eq, Generic, Show)
+  instance Aeson.ToJSON Coin
+
   type Column = [Coin]
   type Board = [Column]
   type Pos = (Int, Int)

@@ -46,8 +46,7 @@ module ConnectFour.Server where
 
   instance Aeson.ToJSON TCPClient where
     toJSON (TCPClient{tcpName=name}) =
-      Aeson.object [ "name" .= name
-               ]
+      Aeson.object [ "name" .= name ]
 
   data WSClient = WSClient {
     wsSocket :: EIO.Socket,
@@ -68,22 +67,35 @@ module ConnectFour.Server where
     players :: [TCPClient]
   } deriving (Eq)
 
-  pushUpdate :: ServerState -> IO ()
-  pushUpdate state@ServerState{queue=q, tcpClients=tcpCs, wsClients=wsClients, games=gs} = do
+  pushUpdate :: ServerState -> Aeson.Value -> IO ()
+  pushUpdate state jsonObject =
+    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ jsonObject
+
+  pushUpdateAll :: ServerState -> IO ()
+  pushUpdateAll state@ServerState{queue=q, tcpClients=tcpCs, wsClients=wsClients, games=gs} = do
     queue <- readTVarIO q
     -- pushUpdateQueue queue
     pushUpdateTCPClients state
-    -- games <- readTVarIO gs
-    -- pushUpdateGames games
+    pushUpdateGames state
 
   pushUpdateLog :: String -> String -> ServerState -> IO ()
   pushUpdateLog name msg state =
-    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ Aeson.object ["log" .= Aeson.object [(Text.pack name) .= msg]]
+    pushUpdate state $ Aeson.object ["log" .= Aeson.object [(Text.pack name) .= msg]]
 
   pushUpdateTCPClients :: ServerState -> IO ()
   pushUpdateTCPClients state@ServerState{tcpClients=tcpCs} = do
     tcpClients <- Map.elems <$> readTVarIO tcpCs
-    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ Aeson.object ["clients" .= (Aeson.toJSON tcpClients)]
+    pushUpdate state $ Aeson.object ["clients" .= (Aeson.toJSON tcpClients)]
+
+  pushUpdateGames :: ServerState -> IO ()
+  pushUpdateGames state@ServerState{games=gs} = do
+    serverGames <- readTVarIO gs
+    games <- mapM (\ServerGame{players=tcpCs, game=g} -> do
+      game <- readTVarIO g
+      return $ Aeson.toJSON (tcpCs, game)
+      ) serverGames
+    pushUpdate state $ Aeson.object ["games" .= (Aeson.toJSON games)]
+    return ()
 
   whileM :: (Monad m) => m Bool -> m a -> m ()
   whileM cond body = do c <- cond
@@ -130,7 +142,7 @@ module ConnectFour.Server where
     (EIO.TextPacket packet) <- atomically $ EIO.receive socket
     arg <- return $ Text.unpack packet
     case arg of
-      "connected" -> pushUpdate state
+      "connected" -> pushUpdateAll state
       _ -> return ()
 
   handleSocketTCP :: ServerState -> Socket -> IO ()
@@ -204,8 +216,11 @@ module ConnectFour.Server where
 
   cleanup :: TCPClient -> ServerState -> IO ()
   cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, games=gs} = do
+    -- clean tcp clients
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
+
+    -- clean queue
     queue <- readTVarIO q
     case queue of
       Just queuedClient -> do
@@ -213,6 +228,8 @@ module ConnectFour.Server where
           atomically $ writeTVar q Nothing
         else return ()
       _ -> return ()
+
+    -- clean server game
     serverGames <- readTVarIO gs
     maybeServerGame <- return $ findServerGame name serverGames
     case maybeServerGame of
@@ -221,6 +238,7 @@ module ConnectFour.Server where
         shutdownServerGame serverGame state
       _ -> return ()
     hClose handle
+    pushUpdateAll state
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
   shutdownServerGame serverGame ServerState{games=gs} = do
