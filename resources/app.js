@@ -6,6 +6,8 @@ $(function() {
   var socket = eio.Socket();
 
   socket.on('open', function() {
+    var $log = $('#log');
+    $log.append(htmlEncode(sprintf("[%s] Connection established`", moment().format())) + "<br/>");
     socket.send('connected');
   });
 

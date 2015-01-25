@@ -67,9 +67,31 @@ module ConnectFour.Server where
     players :: [TCPClient]
   } deriving (Eq)
 
+  whileM :: (Monad m) => m Bool -> m a -> m ()
+  whileM cond body = do c <- cond
+                        when c (body >> whileM cond body)
+
+  findServerGame :: String -> [ServerGame] -> Maybe ServerGame
+  findServerGame name (sg@ServerGame{players=ps}:gs) | name `elem` (map playerToName ps) = Just sg
+                                                     | otherwise = findServerGame name gs
+  findServerGame _ [] = Nothing
+
+  clientsToString :: [TCPClient] -> String
+  clientsToString [] = ""
+  clientsToString (TCPClient{tcpName=name}:cs) = name ++ " " ++ clientsToString cs
+
+  serverGameToClients :: ServerGame -> [TCPClient]
+  serverGameToClients ServerGame{players=ps} = ps
+
+  getCurrentPlayer :: Game -> Int
+  getCurrentPlayer Game{currentPlayer=cp} = cp
+
+  playerToName :: TCPClient -> String
+  playerToName TCPClient{tcpName=name} = name
+
   pushUpdate :: ServerState -> Aeson.Value -> IO ()
   pushUpdate state jsonObject =
-    broadcastWS state $ Text.unpack $ Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ jsonObject
+    broadcastWS (Text.decodeUtf8 $ BSL.toStrict $ Aeson.encode $ jsonObject) state
 
   pushUpdateAll :: ServerState -> IO ()
   pushUpdateAll state = do
@@ -94,28 +116,6 @@ module ConnectFour.Server where
       ) serverGames
     pushUpdate state $ Aeson.object ["serverGames" .= (Aeson.toJSON games)]
     return ()
-
-  whileM :: (Monad m) => m Bool -> m a -> m ()
-  whileM cond body = do c <- cond
-                        when c (body >> whileM cond body)
-
-  findServerGame :: String -> [ServerGame] -> Maybe ServerGame
-  findServerGame name (sg@ServerGame{players=ps}:gs) | name `elem` (map playerToName ps) = Just sg
-                                                     | otherwise = findServerGame name gs
-  findServerGame _ [] = Nothing
-
-  clientsToString :: [TCPClient] -> String
-  clientsToString [] = ""
-  clientsToString (TCPClient{tcpName=name}:cs) = name ++ " " ++ clientsToString cs
-
-  serverGameToClients :: ServerGame -> [TCPClient]
-  serverGameToClients ServerGame{players=ps} = ps
-
-  getCurrentPlayer :: Game -> Int
-  getCurrentPlayer Game{currentPlayer=cp} = cp
-
-  playerToName :: TCPClient -> String
-  playerToName TCPClient{tcpName=name} = name
 
   nameInUse :: String -> ServerState -> IO (Bool)
   nameInUse n ServerState{tcpClients=tcp, wsClients=ws} =
@@ -149,6 +149,41 @@ module ConnectFour.Server where
     hSetBuffering handle NoBuffering
     forkIO $ processCommandTCP handle state
 
+  processCommandTCP :: Handle -> ServerState -> IO ()
+  processCommandTCP handle state = do
+    line <- hGetLine handle
+    pushUpdateLog "<unknown>" line state 
+    args <- return $ splitOn " " line
+
+    case args of
+      (Protocol.handshake -> True) -> do
+        maybeClient <- handshakeTCP args handle state
+        case maybeClient of
+          Just client@TCPClient{tcpName=name} -> do
+            sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
+            forever $ do
+              input <- try $ hGetLine handle
+              case input of
+                Left e ->
+                  if isEOFError e then cleanup client state
+                  else ioError e
+                Right line -> do
+                  pushUpdateLog name line state
+
+                  args <- return $ splitOn " " line
+                  case args of
+                    (Protocol.play -> True) -> do
+                      playCommand client state
+                    (Protocol.move -> True) -> do
+                      moveCommand client args state
+                    _ -> do
+                      sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
+                      cleanup client state
+          Nothing -> do
+            sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse -- handshake failed
+      _ -> do
+        sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- no initial handshake
+
   playCommand :: TCPClient -> ServerState -> IO ()
   playCommand client state@ServerState{queue=q, games=gs} = do
     maybeQueuedClient <- readTVarIO q
@@ -170,8 +205,8 @@ module ConnectFour.Server where
         atomically $ writeTVar q (Just client)
         return ()
 
-  moveCommand :: TCPClient -> ServerState -> [String] -> TVar Bool -> IO ()
-  moveCommand client@TCPClient{tcpName=name} state@ServerState{games=gs} args connected = do
+  moveCommand :: TCPClient -> [String] -> ServerState -> IO ()
+  moveCommand client@TCPClient{tcpName=name} args state@ServerState{games=gs} = do
     games <- readTVarIO gs
     maybeServerGame <- return $ findServerGame name games
     case maybeServerGame of
@@ -187,31 +222,26 @@ module ConnectFour.Server where
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
               if Game.winningColumn game row then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.false ++ name)) clients
-                -- and clean-up
-                atomically $ writeTVar connected False
                 shutdownServerGame serverGame state
               else if Game.fullBoard game then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
-                -- and clean-up
-                atomically $ writeTVar connected False
                 shutdownServerGame serverGame state
               else do
                 pushUpdateGames state
             Nothing -> do
               sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
-              -- and clean-up
-              atomically $ writeTVar connected False
               cleanup client state
         else do
           sendMessageTCP client Protocol.errorInvalidMove -- not clients' turn
-          -- and clean-up
-          atomically $ writeTVar connected False
           cleanup client state
       Nothing -> do
         sendMessageTCP client Protocol.errorInvalidMove -- no game found
-        -- and clean-up
-        atomically $ writeTVar connected False
         cleanup client state
+
+  shutdownServerGame :: ServerGame -> ServerState -> IO ()
+  shutdownServerGame serverGame ServerState{games=gs} = do
+    serverGames <- readTVarIO gs
+    atomically $ writeTVar gs (serverGames \\ [serverGame])
 
   cleanup :: TCPClient -> ServerState -> IO ()
   cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, games=gs} = do
@@ -238,48 +268,6 @@ module ConnectFour.Server where
       _ -> return ()
     hClose handle
     pushUpdateAll state
-
-  shutdownServerGame :: ServerGame -> ServerState -> IO ()
-  shutdownServerGame serverGame ServerState{games=gs} = do
-    serverGames <- readTVarIO gs
-    atomically $ writeTVar gs (serverGames \\ [serverGame])
-
-  processCommandTCP :: Handle -> ServerState -> IO ()
-  processCommandTCP handle state = do
-    line <- hGetLine handle
-    pushUpdateLog "<unknown>" line state 
-    args <- return $ splitOn " " line
-
-    case args of
-      (Protocol.handshake -> True) -> do
-        maybeClient <- handshakeTCP args handle state
-        case maybeClient of
-          Just client@TCPClient{tcpName=name} -> do
-            sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
-            connected <- newTVarIO True
-            whileM (readTVarIO connected) $ do
-              input <- try $ hGetLine handle
-              case input of
-                Left e ->
-                  if isEOFError e then cleanup client state
-                  else ioError e
-                Right line -> do
-                  pushUpdateLog name line state
-
-                  args <- return $ splitOn " " line
-                  case args of
-                    (Protocol.play -> True) -> do
-                      playCommand client state
-                    (Protocol.move -> True) -> do
-                      moveCommand client state args connected
-                    _ -> do
-                      sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
-                      atomically $ writeTVar connected False
-                      cleanup client state
-          Nothing -> do
-            sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse -- handshake failed
-      _ -> do
-        sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- no initial handshake
 
   handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
   handshake name client cs = do
@@ -309,20 +297,14 @@ module ConnectFour.Server where
                                tcpChallenge = (args !! 2) !! 1 == Protocol.boolTrue,
                                tcpLeaderboard = (args !! 2) !! 2 == Protocol.boolTrue }
 
-  sendMessageWS :: WSClient -> String -> IO ()
-  sendMessageWS WSClient{wsSocket=socket} msg = atomically $ do
-    EIO.send socket (EIO.TextPacket $ Text.pack msg)
+  sendMessageWS :: WSClient -> Text.Text -> IO ()
+  sendMessageWS WSClient{wsSocket=socket} packet = atomically $ do
+    EIO.send socket (EIO.TextPacket $ packet)
 
   sendMessageTCP :: TCPClient -> String -> IO ()
   sendMessageTCP TCPClient{tcpHandle=handle} msg = hPutStrLn handle msg
 
-  broadcast :: forall a. (a -> String -> IO ()) -> TVar (Map String a) -> String -> IO ()
-  broadcast sendMessage clients msg = do
+  broadcastWS :: Text.Text -> ServerState -> IO ()
+  broadcastWS packet ServerState{wsClients=clients} = do
     clientMap <- readTVarIO clients
-    mapM_ (\socket -> sendMessage socket msg) (Map.elems clientMap)
-
-  broadcastWS :: ServerState -> String -> IO ()
-  broadcastWS ServerState{wsClients=clients} msg = broadcast sendMessageWS clients msg
-
-  broadcastTCP :: ServerState -> String -> IO ()
-  broadcastTCP ServerState{tcpClients=clients} msg = broadcast sendMessageTCP clients msg
+    mapM_ (\socket -> sendMessageWS socket packet) (Map.elems clientMap)
