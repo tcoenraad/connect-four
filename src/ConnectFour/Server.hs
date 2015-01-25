@@ -14,6 +14,7 @@ module ConnectFour.Server where
   import Data.List
 
   import Control.Applicative
+  import Control.Exception
   import Control.Concurrent (forkIO)
   import Control.Concurrent.STM
   import Control.Monad (forever, when)
@@ -23,6 +24,7 @@ module ConnectFour.Server where
 
   import Network (accept, Socket)
   import System.IO (hSetBuffering, hGetLine, hPutStrLn, hClose, BufferMode (..), Handle)
+  import System.IO.Error
 
   import qualified Data.Aeson as Aeson
   import qualified Data.ByteString.Lazy as BSL
@@ -258,19 +260,24 @@ module ConnectFour.Server where
             sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
             connected <- newTVarIO True
             whileM (readTVarIO connected) $ do
-              line <- hGetLine handle
-              pushUpdateLog name line state
+              input <- try $ hGetLine handle
+              case input of
+                Left e ->
+                  if isEOFError e then cleanup client state
+                  else ioError e
+                Right line -> do
+                  pushUpdateLog name line state
 
-              args <- return $ splitOn " " line
-              case args of
-                (Protocol.play -> True) -> do
-                  playCommand client state
-                (Protocol.move -> True) -> do
-                  moveCommand client state args connected
-                _ -> do
-                  sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
-                  atomically $ writeTVar connected False
-                  cleanup client state
+                  args <- return $ splitOn " " line
+                  case args of
+                    (Protocol.play -> True) -> do
+                      playCommand client state
+                    (Protocol.move -> True) -> do
+                      moveCommand client state args connected
+                    _ -> do
+                      sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
+                      atomically $ writeTVar connected False
+                      cleanup client state
           Nothing -> do
             sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse -- handshake failed
       _ -> do
