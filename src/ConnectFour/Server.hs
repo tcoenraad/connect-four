@@ -13,18 +13,16 @@ module ConnectFour.Server where
   import Data.List.Split
   import Data.List
 
-  import Control.Applicative
-  import Control.Exception
+  import Control.Applicative ((<$>))
+  import Control.Exception (try)
   import Control.Concurrent (forkIO)
-  import Control.Concurrent.STM
+  import Control.Concurrent.STM (newTVarIO, readTVar, readTVarIO, writeTVar, atomically, TVar)
   import Control.Monad (forever, when)
   import Control.Monad.IO.Class (MonadIO, liftIO)
 
-  import GHC.Generics
-
   import Network (accept, Socket)
   import System.IO (hSetBuffering, hGetLine, hPutStrLn, hClose, BufferMode (..), Handle)
-  import System.IO.Error
+  import System.IO.Error (isEOFError)
 
   import qualified Data.Aeson as Aeson
   import qualified Data.ByteString.Lazy as BSL
@@ -104,7 +102,7 @@ module ConnectFour.Server where
   findServerGame :: String -> [ServerGame] -> Maybe ServerGame
   findServerGame name (sg@ServerGame{players=ps}:gs) | name `elem` (map playerToName ps) = Just sg
                                                      | otherwise = findServerGame name gs
-  findServerGame name [] = Nothing
+  findServerGame _ [] = Nothing
 
   clientsToString :: [TCPClient] -> String
   clientsToString [] = ""
@@ -152,7 +150,7 @@ module ConnectFour.Server where
     forkIO $ processCommandTCP handle state
 
   playCommand :: TCPClient -> ServerState -> IO ()
-  playCommand client state@ServerState{queue=q, games=gs, tcpClients=tcpCs} = do
+  playCommand client state@ServerState{queue=q, games=gs} = do
     maybeQueuedClient <- readTVarIO q
     case maybeQueuedClient of
       Just queuedClient -> do
