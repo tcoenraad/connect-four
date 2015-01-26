@@ -10,6 +10,7 @@ module Main where
   import qualified Snap.Core as Snap
   import qualified Snap.Util.FileServe as Snap
   import qualified Snap.Http.Server as Snap
+  import qualified Snap.Http.Server.Config as Snap.Config
   import qualified Network.EngineIO as EIO
   import qualified Network.EngineIO.Snap as EIOSnap
 
@@ -40,7 +41,8 @@ module Main where
   mainWS state = do
     eio <- EIO.initialize
     dataDir <- getDataDir
-    Snap.quickHttpServe $
+    conf <- return $ Snap.Config.setPort 3500 Snap.Config.emptyConfig
+    Snap.httpServe conf $
       Snap.route [ ("/engine.io", EIO.handler eio (handleSocketWS state) EIOSnap.snapAPI)
                  , ("/bower_components", Snap.serveDirectory "bower_components")
                  , ("/", Snap.serveDirectory dataDir)
@@ -48,5 +50,5 @@ module Main where
 
   mainTCP :: ServerState -> IO ()
   mainTCP state = do
-    sock <- listenOn $ PortNumber 8001
+    sock <- listenOn $ PortNumber 3501
     handleSocketTCP state sock
