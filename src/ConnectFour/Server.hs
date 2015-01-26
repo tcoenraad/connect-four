@@ -9,7 +9,7 @@ module ConnectFour.Server where
   -- import Debug.Trace
 
   import Data.Aeson ((.=))
-  import Data.Map.Strict hiding (map, (\\))
+  import Data.Map.Strict hiding (map, filter, (\\))
   import Data.List.Split
   import Data.List
 
@@ -17,7 +17,7 @@ module ConnectFour.Server where
   import Control.Exception (try)
   import Control.Concurrent (forkIO)
   import Control.Concurrent.STM (newTVarIO, readTVar, readTVarIO, writeTVar, atomically, TVar)
-  import Control.Monad (forever, when)
+  import Control.Monad (forever, when, filterM)
   import Control.Monad.IO.Class (MonadIO, liftIO)
 
   import Network (accept, Socket)
@@ -59,7 +59,7 @@ module ConnectFour.Server where
     queue :: TVar (Maybe TCPClient),
     tcpClients :: TVar (Map String TCPClient),
     wsClients :: TVar (Map String WSClient),
-    games :: TVar [ServerGame]
+    serverGames :: TVar [ServerGame]
   }
 
   data ServerGame = ServerGame {
@@ -71,14 +71,27 @@ module ConnectFour.Server where
   whileM cond body = do c <- cond
                         when c (body >> whileM cond body)
 
-  findServerGame :: String -> [ServerGame] -> Maybe ServerGame
-  findServerGame name (sg@ServerGame{players=ps}:gs) | name `elem` (map playerToName ps) = Just sg
-                                                     | otherwise = findServerGame name gs
-  findServerGame _ [] = Nothing
+  boolToString :: Bool -> String
+  boolToString b = if b then [Protocol.boolTrue] else [Protocol.boolFalse]
+
+  findServerGame :: String -> ServerState -> IO (Maybe ServerGame)
+  findServerGame name ServerState{serverGames=sg} = do
+    serverGames <- readTVarIO sg
+    return $ findServerGame' name serverGames
+
+  findServerGame' :: String -> [ServerGame] -> Maybe ServerGame
+  findServerGame' name (sg@ServerGame{players=ps}:gs) | name `elem` (map playerToName ps) = Just sg
+                                                      | otherwise = findServerGame' name gs
+  findServerGame' _ [] = Nothing
 
   clientsToString :: [TCPClient] -> String
   clientsToString [] = ""
   clientsToString (TCPClient{tcpName=name}:cs) = name ++ " " ++ clientsToString cs
+
+  clientsToStringWithOptions :: [TCPClient] -> String
+  clientsToStringWithOptions [] = ""
+  clientsToStringWithOptions (TCPClient{tcpName=name, tcpChat=chat, tcpChallenge=challenge, tcpLeaderboard=leaderboard}:cs) =
+    name ++ " "++ (boolToString chat) ++ (boolToString challenge) ++ (boolToString leaderboard) ++ ", " ++ clientsToStringWithOptions cs
 
   serverGameToClients :: ServerGame -> [TCPClient]
   serverGameToClients ServerGame{players=ps} = ps
@@ -105,11 +118,19 @@ module ConnectFour.Server where
   pushUpdateTCPClients :: ServerState -> IO ()
   pushUpdateTCPClients state@ServerState{tcpClients=tcpCs} = do
     tcpClients <- Map.elems <$> readTVarIO tcpCs
+    tcpClientsInLobby <- filterM (\TCPClient{tcpName=name} -> do
+      serverGame <- findServerGame name state
+      case serverGame of
+        Just _ -> return False
+        Nothing -> return True) tcpClients
+    let playerList = clientsToStringWithOptions tcpClientsInLobby
+    playerList <- return $ Protocol.sendPlayers ++ " " ++ (take ((length playerList) - 2) playerList)
+    mapM_ ((flip sendMessageTCP) playerList) tcpClientsInLobby
     pushUpdate state $ Aeson.object ["clients" .= (Aeson.toJSON tcpClients)]
 
   pushUpdateGames :: ServerState -> IO ()
-  pushUpdateGames state@ServerState{games=gs} = do
-    serverGames <- readTVarIO gs
+  pushUpdateGames state@ServerState{serverGames=sg} = do
+    serverGames <- readTVarIO sg
     games <- mapM (\ServerGame{players=tcpCs, game=g} -> do
       game <- readTVarIO g
       return $ Aeson.toJSON (tcpCs, game)
@@ -160,6 +181,7 @@ module ConnectFour.Server where
         case maybeClient of
           Just client@TCPClient{tcpName=name} -> do
             sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " 000"
+            pushUpdateTCPClients state
             forever $ do
               input <- try $ hGetLine handle
               case input of
@@ -184,7 +206,7 @@ module ConnectFour.Server where
         sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- no initial handshake
 
   playCommand :: TCPClient -> ServerState -> IO ()
-  playCommand client state@ServerState{queue=q, games=gs} = do
+  playCommand client state@ServerState{queue=q, serverGames=sg} = do
     maybeQueuedClient <- readTVarIO q
     case maybeQueuedClient of
       Just queuedClient -> do
@@ -196,18 +218,17 @@ module ConnectFour.Server where
           newGame <- newTVarIO initalizeGame
           game <- return ServerGame{ players = clients, game = newGame }
           atomically $ do
-            games <- readTVar gs
-            writeTVar gs $ games ++ [game]
+            games <- readTVar sg
+            writeTVar sg $ games ++ [game]
           mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
-          pushUpdateGames state
+          pushUpdateAll state
       Nothing -> do
         atomically $ writeTVar q (Just client)
         return ()
 
   moveCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  moveCommand client@TCPClient{tcpName=name} args state@ServerState{games=gs} = do
-    games <- readTVarIO gs
-    maybeServerGame <- return $ findServerGame name games
+  moveCommand client@TCPClient{tcpName=name} args state = do
+    maybeServerGame <- findServerGame name state
     case maybeServerGame of
       Just serverGame@ServerGame{players=ps, game=g} -> do
         game <- readTVarIO g
@@ -239,12 +260,12 @@ module ConnectFour.Server where
         cleanup client state
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
-  shutdownServerGame serverGame ServerState{games=gs} = do
-    serverGames <- readTVarIO gs
-    atomically $ writeTVar gs (serverGames \\ [serverGame])
+  shutdownServerGame serverGame ServerState{serverGames=sg} = do
+    serverGames <- readTVarIO sg
+    atomically $ writeTVar sg (serverGames \\ [serverGame])
 
   cleanup :: TCPClient -> ServerState -> IO ()
-  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, games=gs} = do
+  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, serverGames=sg} = do
     -- clean tcp clients
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
@@ -259,8 +280,7 @@ module ConnectFour.Server where
       _ -> return ()
 
     -- clean server game
-    serverGames <- readTVarIO gs
-    maybeServerGame <- return $ findServerGame name serverGames
+    maybeServerGame <- findServerGame name state
     case maybeServerGame of
       Just serverGame@ServerGame{players=ps} -> do
         mapM_ (\client -> sendMessageTCP client (Protocol.errorInvalidMove)) ps
@@ -288,7 +308,6 @@ module ConnectFour.Server where
       return Nothing
     else do
       handshake (args !! 1) client clients
-      pushUpdateTCPClients state
       return $ Just client
         where
           client = TCPClient { tcpName = args !! 1,

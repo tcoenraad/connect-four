@@ -31,8 +31,14 @@ module ConnectFour.Protocol where
   gameOver :: String
   gameOver = "gameOver"
 
+  sendPlayers :: String
+  sendPlayers = "sendPlayers"
+
   boolTrue :: Char
   boolTrue = '1'
+
+  boolFalse :: Char
+  boolFalse = '0'
 
   errorNameInUse :: String
   errorNameInUse = "error invalidName"
