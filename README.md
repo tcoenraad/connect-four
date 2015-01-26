@@ -11,6 +11,7 @@ a connect four implementation for Softwaresystemen - Haskell edition
 Requirements
 ------------
 * [Haskell Platform](https://www.haskell.org/platform/)
+* [Bower](http://bower.io/#install-bower)
 
 How to set-up
 -------------
