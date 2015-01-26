@@ -3,6 +3,8 @@ function htmlEncode(val) {
 }
 
 $(function() {
+  $('#hostname').text(window.location.hostname);
+
   var socket = eio.Socket();
 
   socket.on('open', function() {
