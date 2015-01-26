@@ -5,7 +5,7 @@ license-file:        LICENSE
 author:              Twan Coenraad
 build-type:          Simple
 extra-source-files:  README.md
-cabal-version:       >=1.22.0.0
+cabal-version:       >=1.18.0.0
 
 Data-Dir: resources
 
