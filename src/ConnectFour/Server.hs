@@ -250,13 +250,10 @@ module ConnectFour.Server where
               else do
                 return ()
             Nothing -> do
-              sendMessageTCP client Protocol.errorInvalidMove -- move not allowed
               cleanup client state
         else do
-          sendMessageTCP client Protocol.errorInvalidMove -- not clients' turn
           cleanup client state
       Nothing -> do
-        sendMessageTCP client Protocol.errorInvalidMove -- no game found
         cleanup client state
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
@@ -302,20 +299,22 @@ module ConnectFour.Server where
 
   handshakeTCP :: [String] -> Handle -> ServerState -> IO (Maybe TCPClient)
   handshakeTCP args handle state@ServerState{tcpClients=clients} = do
-    name <- return $ args !! 1
+    let name = args !! 2
+
     inUse <- nameInUse name state
     if inUse then do
       return Nothing
     else do
-      handshake (args !! 1) client clients
-      return $ Just client
-        where
-          client = TCPClient { tcpName = args !! 1,
+      let opts = args !! 1
+      let client = TCPClient { tcpName = name,
                                tcpHandle = handle,
-                               tcpChat = (args !! 2) !! 0 == Protocol.boolTrue,
-                               tcpChallenge = (args !! 2) !! 1 == Protocol.boolTrue,
-                               tcpLeaderboard = (args !! 2) !! 2 == Protocol.boolTrue }
+                               tcpChat = opts !! 0 == Protocol.boolTrue,
+                               tcpChallenge = opts !! 1 == Protocol.boolTrue,
+                               tcpLeaderboard = opts !! 2 == Protocol.boolTrue }
 
+      handshake name client clients
+      return $ Just client
+       
   sendMessageWS :: WSClient -> Text.Text -> IO ()
   sendMessageWS WSClient{wsSocket=socket} packet = atomically $ do
     EIO.send socket (EIO.TextPacket $ packet)
