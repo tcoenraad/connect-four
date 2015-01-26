@@ -10,12 +10,30 @@ a connect four implementation for Softwaresystemen - Haskell edition
 
 Requirements
 ------------
-* [Haskell](https://www.haskell.org/platform/)
-* [Hspec](http://hspec.github.io/)
+* [Haskell Platform](https://www.haskell.org/platform/)
+
+How to set-up
+-------------
+```bash
+    $ cabal install --only-dependencies
+    $ bower install
+```
 
 How to run
 ----------
+
+### Run app
+```bash
+	$ cabal run
+```
+* Web monitor on `http://localhost:3500`
+* Server on `localhost 3501`
+
 ### Run tests
 ```bash
     $ cabal test
 ```
+
+Screenshot
+----------
+![screenshot](http://i.imgur.com/qxEyCLS.png)
