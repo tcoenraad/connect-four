@@ -173,8 +173,7 @@ module ConnectFour.Server where
 
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
-    let input = hGetLine handle
-    line <- strip <$> input
+    line <- hGetLine handle
     pushUpdateLog "<unknown>" line state 
     args <- return $ splitOn " " line
 
@@ -190,7 +189,7 @@ module ConnectFour.Server where
               case input of
                 Left e ->
                   if isEOFError e then cleanup client state
-                  else cleanup client state
+                  else ioError e
                 Right input -> do
                   let line = strip input
 
