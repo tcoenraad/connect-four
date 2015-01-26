@@ -12,6 +12,7 @@ module ConnectFour.Server where
   import Data.Map.Strict hiding (map, filter, (\\))
   import Data.List.Split
   import Data.List
+  import Data.String.Utils
 
   import Control.Applicative ((<$>))
   import Control.Exception (try)
@@ -171,7 +172,8 @@ module ConnectFour.Server where
 
   processCommandTCP :: Handle -> ServerState -> IO ()
   processCommandTCP handle state = do
-    line <- hGetLine handle
+    let input = hGetLine handle
+    line <- strip <$> input
     pushUpdateLog "<unknown>" line state 
     args <- return $ splitOn " " line
 
@@ -188,7 +190,9 @@ module ConnectFour.Server where
                 Left e ->
                   if isEOFError e then cleanup client state
                   else ioError e
-                Right line -> do
+                Right input -> do
+                  let line = strip input
+
                   pushUpdateLog name line state
 
                   args <- return $ splitOn " " line

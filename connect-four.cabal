@@ -20,6 +20,7 @@ Executable server
     engine-io,
     engine-io-snap,
     hspec,
+    MissingH,
     mtl,
     network,
     snap-core,
