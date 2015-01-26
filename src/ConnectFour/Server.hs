@@ -113,7 +113,8 @@ module ConnectFour.Server where
     pushUpdateGames state
 
   pushUpdateLog :: String -> String -> ServerState -> IO ()
-  pushUpdateLog name msg state =
+  pushUpdateLog name msg state = do
+    putStrLn $ name ++ ": `" ++ msg ++ "`"
     pushUpdate state $ Aeson.object ["log" .= Aeson.object [(Text.pack name) .= msg]]
 
   pushUpdateTCPClients :: ServerState -> IO ()
@@ -189,7 +190,7 @@ module ConnectFour.Server where
               case input of
                 Left e ->
                   if isEOFError e then cleanup client state
-                  else ioError e
+                  else cleanup client state
                 Right input -> do
                   let line = strip input
 
