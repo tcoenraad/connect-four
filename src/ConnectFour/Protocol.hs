@@ -13,6 +13,9 @@ module ConnectFour.Protocol where
     r = reads (last s) :: [(Int, String)]
     row = fst $ head r
 
+  chat :: [String] -> Bool
+  chat s = head s == "chat" && length s >= 2
+
   true :: String
   true = "true"
 
@@ -33,6 +36,12 @@ module ConnectFour.Protocol where
 
   sendPlayers :: String
   sendPlayers = "sendPlayers"
+
+  sendChat :: String
+  sendChat = "sendChat"
+
+  supported :: String
+  supported = "100"
 
   boolTrue :: Char
   boolTrue = '1'
