@@ -128,11 +128,13 @@ module ConnectFour.Server where
 
   pushUpdateTCPClients :: ServerState -> IO ()
   pushUpdateTCPClients state@ServerState{tcpClients=tcpCs} = do
-    lobbyClients <- tcpClientsInLobby state
-    let playerList = clientsToStringWithOptions lobbyClients
-    playerList <- return $ Protocol.sendPlayers ++ " " ++ (take ((length playerList) - 2) playerList)
-    mapM_ ((flip sendMessageTCP) playerList) lobbyClients
-    pushUpdate state $ Aeson.object ["clients" .= (Aeson.toJSON lobbyClients)]
+    tcpLobbyClients <- tcpClientsInLobby state
+    let lobbyPlayerList = clientsToStringWithOptions tcpLobbyClients
+    let msg = Protocol.sendPlayers ++ " " ++ (take ((length lobbyPlayerList) - 2) lobbyPlayerList)
+    mapM_ ((flip sendMessageTCP) msg) tcpLobbyClients
+
+    tcpClients <- readTVarIO tcpCs
+    pushUpdate state $ Aeson.object ["clients" .= (Aeson.toJSON tcpClients)]
 
   pushUpdateGames :: ServerState -> IO ()
   pushUpdateGames state@ServerState{serverGames=sg} = do
