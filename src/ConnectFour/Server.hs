@@ -267,14 +267,21 @@ module ConnectFour.Server where
         cleanup client state
 
   chatCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  chatCommand client@TCPClient{tcpName=name} args state = do
-    maybeServerGame <- findServerGame name state
-    case maybeServerGame of
-      Just serverGame@ServerGame{players=ps} -> do
-        mapM_ (\client -> sendMessageTCP client (Protocol.sendChat ++ " " ++ concat (tail args))) ps
-      Nothing -> do
-        clients <- tcpClientsInLobby state
-        mapM_ (\client -> sendMessageTCP client (Protocol.sendChat ++ " " ++ concat (tail args))) clients
+  chatCommand client@TCPClient{tcpName=name, tcpChat=chat} args state = do
+    if (not chat) then do
+      sendMessageTCP client $ Protocol.errorInvalidClient
+      cleanup client state
+    else do
+      maybeServerGame <- findServerGame name state
+      let msg = Protocol.sendChat ++ " " ++ name ++ " " ++ concat (tail args)
+      case maybeServerGame of
+        Just serverGame@ServerGame{players=ps} -> do
+          let chatClients = filter (\TCPClient{tcpChat=chat} -> chat) ps
+          mapM_ (\client -> sendMessageTCP client msg) chatClients
+        Nothing -> do
+          clients <- tcpClientsInLobby state
+          let chatClients = filter (\TCPClient{tcpChat=chat} -> chat) clients
+          mapM_ (\client -> sendMessageTCP client msg) chatClients
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
   shutdownServerGame serverGame ServerState{serverGames=sg} = do

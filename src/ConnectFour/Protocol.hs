@@ -57,3 +57,6 @@ module ConnectFour.Protocol where
 
   errorInvalidMove :: String
   errorInvalidMove = "error invalidMove"
+
+  errorInvalidClient :: String
+  errorInvalidClient = "error invalidClient"
