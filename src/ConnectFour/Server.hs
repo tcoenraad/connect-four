@@ -266,7 +266,7 @@ module ConnectFour.Server where
     atomically $ writeTVar sg (serverGames \\ [serverGame])
 
   cleanup :: TCPClient -> ServerState -> IO ()
-  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q, serverGames=sg} = do
+  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q} = do
     -- clean tcp clients
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
