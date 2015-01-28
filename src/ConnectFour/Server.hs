@@ -23,7 +23,7 @@ module ConnectFour.Server where
 
   import Network (accept, Socket)
   import System.IO (hSetBuffering, hGetLine, hPutStrLn, hClose, BufferMode (..), Handle)
-  import System.IO.Error (isEOFError)
+  import System.IO.Error (catchIOError, isEOFError)
 
   import qualified Data.Aeson as Aeson
   import qualified Data.ByteString.Lazy as BSL
@@ -191,27 +191,27 @@ module ConnectFour.Server where
             sendMessageTCP TCPClient{tcpHandle=handle} $ Protocol.ack ++ " " ++ Protocol.supported
             pushUpdateTCPClients state
             forever $ do
-              input <- try $ hGetLine handle
-              case input of
-                Left e ->
-                  if isEOFError e then cleanup client state
-                  else ioError e
-                Right input -> do
-                  let line = strip input
+              catchIOError (do
+                input <- hGetLine handle
+                let line = strip input
 
-                  pushUpdateLog name line state
+                pushUpdateLog name line state
 
-                  args <- return $ splitOn " " line
-                  case args of
-                    (Protocol.play -> True) -> do
-                      playCommand client state
-                    (Protocol.move -> True) -> do
-                      moveCommand client args state
-                    (Protocol.chat -> True) -> do
-                      chatCommand client args state
-                    _ -> do
-                      sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
-                      cleanup client state
+                args <- return $ splitOn " " line
+                case args of
+                  (Protocol.play -> True) -> do
+                    playCommand client state
+                  (Protocol.move -> True) -> do
+                    moveCommand client args state
+                  (Protocol.chat -> True) -> do
+                    chatCommand client args state
+                  _ -> do
+                    sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
+                    cleanup client state)
+                (\e -> do
+                  cleanup client state
+                  ioError e
+                )
           Nothing -> do
             sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorNameInUse -- handshake failed
       _ -> do
