@@ -233,6 +233,7 @@ module ConnectFour.Server where
             games <- readTVar sg
             writeTVar sg $ games ++ [game]
           mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
+          pushUpdateLog "<game started>" (tail $ clientsToString clients) state
           pushUpdateAll state
       Nothing -> do
         atomically $ writeTVar q (Just client)
@@ -252,15 +253,17 @@ module ConnectFour.Server where
               clients <- return $ serverGameToClients serverGame
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
-              pushUpdateGames state
               if Game.winningColumn game row then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.false ++ " " ++ name)) clients
                 shutdownServerGame serverGame state
+                pushUpdateLog "<game won>" name state
               else if Game.fullBoard game then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
                 shutdownServerGame serverGame state
+                pushUpdateLog "<game draw>" (tail $ clientsToString clients) state
               else do
                 return ()
+              pushUpdateAll state
             Nothing -> do
               cleanup client state
         else do
@@ -315,6 +318,7 @@ module ConnectFour.Server where
         shutdownServerGame serverGame state
       _ -> return ()
     pushUpdateAll state
+    pushUpdateLog "<client disconnected>" name state
 
   handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
   handshake name client cs = do
