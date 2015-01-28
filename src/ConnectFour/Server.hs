@@ -15,7 +15,6 @@ module ConnectFour.Server where
   import Data.String.Utils
 
   import Control.Applicative ((<$>))
-  import Control.Exception (try)
   import Control.Concurrent (forkIO)
   import Control.Concurrent.STM (newTVarIO, readTVar, readTVarIO, writeTVar, atomically, TVar)
   import Control.Monad (forever, when, filterM)
@@ -87,6 +86,7 @@ module ConnectFour.Server where
 
   clientsToString :: [TCPClient] -> String
   clientsToString [] = ""
+  clientsToString [TCPClient{tcpName=name}] = name
   clientsToString (TCPClient{tcpName=name}:cs) = name ++ " " ++ clientsToString cs
 
   clientsToStringWithOptions :: [TCPClient] -> String
@@ -233,7 +233,8 @@ module ConnectFour.Server where
             games <- readTVar sg
             writeTVar sg $ games ++ [game]
           mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
-          pushUpdateLog "<server>" ("<game started> " ++ (tail $ clientsToString clients)) state
+
+          pushUpdateLog "<server>" ("<game started> " ++ (clientsToString clients)) state
           pushUpdateAll state
       Nothing -> do
         atomically $ writeTVar q (Just client)
@@ -260,7 +261,8 @@ module ConnectFour.Server where
               else if Game.fullBoard game then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
                 shutdownServerGame serverGame state
-                pushUpdateLog "<server>" ("<game draw>" ++ (tail $ clientsToString clients)) state
+
+                pushUpdateLog "<server>" ("<game draw>" ++ (clientsToString clients)) state
               else do
                 return ()
               pushUpdateAll state
@@ -295,8 +297,6 @@ module ConnectFour.Server where
 
   cleanup :: TCPClient -> ServerState -> IO ()
   cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q} = do
-    hClose handle
-
     -- clean tcp clients
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
@@ -318,7 +318,9 @@ module ConnectFour.Server where
         shutdownServerGame serverGame state
       _ -> return ()
     pushUpdateAll state
-    pushUpdateLog "<server>" ("<client disconnected>" ++ name) state
+    pushUpdateLog "<server>" ("<client disconnected> " ++ name) state
+
+    hClose handle
 
   handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
   handshake name client cs = do
