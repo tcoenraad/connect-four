@@ -277,7 +277,7 @@ module ConnectFour.Server where
       maybeServerGame <- findServerGame name state
       let msg = Protocol.sendChat ++ " " ++ name ++ " " ++ concat (tail args)
       case maybeServerGame of
-        Just serverGame@ServerGame{players=ps} -> do
+        Just ServerGame{players=ps} -> do
           let chatClients = filter (\TCPClient{tcpChat=chat} -> chat) ps
           mapM_ (\client -> sendMessageTCP client msg) chatClients
         Nothing -> do
