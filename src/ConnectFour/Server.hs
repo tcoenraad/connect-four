@@ -261,8 +261,7 @@ module ConnectFour.Server where
               else if Game.fullBoard game then do
                 mapM_ (\client -> sendMessageTCP client (Protocol.gameOver ++ " " ++ Protocol.true)) clients
                 shutdownServerGame serverGame state
-
-                pushUpdateLog "<server>" ("<game draw>" ++ (clientsToString clients)) state
+                pushUpdateLog "<server>" ("<game draw> " ++ (clientsToString clients)) state
               else do
                 return ()
               pushUpdateAll state
