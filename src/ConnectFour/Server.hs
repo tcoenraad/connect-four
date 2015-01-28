@@ -280,7 +280,7 @@ module ConnectFour.Server where
       cleanup client state
     else do
       maybeServerGame <- findServerGame name state
-      let msg = Protocol.sendChat ++ " " ++ name ++ " " ++ concat (tail args)
+      let msg = Protocol.sendChat ++ " " ++ name ++ " " ++ intercalate " " (tail args)
       case maybeServerGame of
         Just ServerGame{players=ps} -> do
           let chatClients = filter (\TCPClient{tcpChat=chat} -> chat) ps
