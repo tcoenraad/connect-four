@@ -207,7 +207,7 @@ module ConnectFour.Server where
                     chatCommand client args state
                   _ -> do
                     sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
-                    cleanup client state)
+                    hClose handle)
                 (\e -> do
                   cleanup client state
                   ioError e
@@ -241,7 +241,7 @@ module ConnectFour.Server where
         return ()
 
   moveCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  moveCommand client@TCPClient{tcpName=name} args state = do
+  moveCommand client@TCPClient{tcpName=name, tcpHandle=handle} args state = do
     maybeServerGame <- findServerGame name state
     case maybeServerGame of
       Just serverGame@ServerGame{players=ps, game=g} -> do
@@ -267,17 +267,17 @@ module ConnectFour.Server where
                 return ()
               pushUpdateAll state
             Nothing -> do
-              cleanup client state
+              hClose handle
         else do
-          cleanup client state
+          hClose handle
       Nothing -> do
-        cleanup client state
+        hClose handle
 
   chatCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  chatCommand client@TCPClient{tcpName=name, tcpChat=chat} args state = do
+  chatCommand client@TCPClient{tcpName=name, tcpChat=chat, tcpHandle=handle} args state = do
     if (not chat) then do
       sendMessageTCP client $ Protocol.errorInvalidClient
-      cleanup client state
+      hClose handle
     else do
       maybeServerGame <- findServerGame name state
       let msg = Protocol.sendChat ++ " " ++ name ++ " " ++ intercalate " " (tail args)
@@ -319,8 +319,6 @@ module ConnectFour.Server where
       _ -> return ()
     pushUpdateAll state
     pushUpdateLog "<server>" ("<client disconnected> " ++ name) state
-
-    hClose handle
 
   handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
   handshake name client cs = do
