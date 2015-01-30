@@ -165,7 +165,7 @@ module ConnectFour.Server where
   processCommandWS :: EIO.Socket -> ServerState -> IO ()
   processCommandWS socket state = forever $ do 
     (EIO.TextPacket packet) <- atomically $ EIO.receive socket
-    arg <- return $ Text.unpack packet
+    let arg = Text.unpack packet
     case arg of
       "connected" -> pushUpdateAll state
       _ -> return ()
@@ -180,7 +180,7 @@ module ConnectFour.Server where
   processCommandTCP handle state = do
     line <- strip <$> hGetLine handle
     pushUpdateLog "<unknown>" line state 
-    args <- return $ splitOn " " line
+    let args = splitOn " " line
 
     case args of
       (Protocol.handshake -> True) -> do
@@ -196,7 +196,7 @@ module ConnectFour.Server where
 
                 pushUpdateLog name line state
 
-                args <- return $ splitOn " " line
+                let args = splitOn " " line
                 case args of
                   (Protocol.play -> True) -> do
                     playCommand client state
@@ -225,9 +225,9 @@ module ConnectFour.Server where
           return ()
         else do
           atomically $ writeTVar q Nothing
-          clients <- return [queuedClient, client]
           newGame <- newTVarIO initalizeGame
-          game <- return ServerGame{ players = clients, game = newGame }
+          let clients = [queuedClient, client]
+          let game = ServerGame{ players = clients, game = newGame }
           atomically $ do
             games <- readTVar sg
             writeTVar sg $ games ++ [game]
@@ -246,11 +246,11 @@ module ConnectFour.Server where
       Just serverGame@ServerGame{players=ps, game=g} -> do
         game <- readTVarIO g
         if (ps !! getCurrentPlayer game) == client then do
-          row <- return $ read (args !! 1)
-          maybeGame <- return $ Game.dropCoin game row
+          let row = read (args !! 1)
+          let maybeGame = Game.dropCoin game row
           case maybeGame of
             Just game -> do
-              clients <- return $ serverGameToClients serverGame
+              let clients = serverGameToClients serverGame
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
               if Game.winningColumn game row then do
@@ -294,7 +294,7 @@ module ConnectFour.Server where
     atomically $ writeTVar sg (serverGames \\ [serverGame])
 
   cleanup :: TCPClient -> ServerState -> IO ()
-  cleanup client@TCPClient{tcpName=name, tcpHandle=handle} state@ServerState{tcpClients=tcpCs, queue=q} = do
+  cleanup client@TCPClient{tcpName=name} state@ServerState{tcpClients=tcpCs, queue=q} = do
     -- clean tcp clients
     tcpClients <- readTVarIO tcpCs
     atomically $ writeTVar tcpCs $ Map.delete name tcpClients
