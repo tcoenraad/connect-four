@@ -153,14 +153,13 @@ module ConnectFour.Server where
       return $ any (\name -> name == n) (Map.keys tcpClientMap ++ Map.keys wsClientMap)
 
   handleSocketWS :: MonadIO m => ServerState -> EIO.Socket -> m EIO.SocketApp
-  handleSocketWS state socket = do
-    liftIO $ do
-      uuid <- UUID.toString <$> UUID.nextRandom
-      handshakeWS uuid socket state
+  handleSocketWS state@ServerState{wsClients=wsCs} socket = do
+    uuid <- liftIO $ UUID.toString <$> UUID.nextRandom
+    liftIO $ handshakeWS uuid socket state
 
     return EIO.SocketApp {
       EIO.saApp = processCommandWS socket state
-    , EIO.saOnDisconnect = return ()
+    , EIO.saOnDisconnect = cleanupWS uuid state
     }
 
   processCommandWS :: EIO.Socket -> ServerState -> IO ()
@@ -318,6 +317,11 @@ module ConnectFour.Server where
       _ -> return ()
     pushUpdateAll state
     pushUpdateLog "<server>" ("<client disconnected> " ++ name) state
+
+  cleanupWS :: String -> ServerState -> IO ()
+  cleanupWS uuid ServerState{wsClients=wsCs} = do
+    wsClients <- readTVarIO wsCs
+    atomically $ writeTVar wsCs $ Map.delete uuid wsClients
 
   handshake :: forall a. String -> a -> TVar (Map String a) -> IO ()
   handshake name client cs = do
