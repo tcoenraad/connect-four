@@ -35,7 +35,8 @@ module Main where
     sg <- STM.newTVarIO []
     tcp <- STM.newTVarIO Map.empty
     ws <- STM.newTVarIO Map.empty
-    return ServerState { queue = q, serverGames = sg, tcpClients = tcp, wsClients = ws }
+    chTcp <- STM.newTVarIO Map.empty
+    return ServerState { queue = q, serverGames = sg, tcpClients = tcp, wsClients = ws, challengedTCPClients = chTcp }
 
   mainWS :: ServerState -> IO ()
   mainWS state = do

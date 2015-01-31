@@ -8,10 +8,11 @@ module ConnectFour.Server where
 
   -- import Debug.Trace
 
+  import Prelude hiding (lookup)
   import Data.Aeson ((.=))
   import Data.Map.Strict hiding (map, filter, (\\))
   import Data.List.Split
-  import Data.List
+  import Data.List hiding (lookup)
   import Data.String.Utils
 
   import Control.Applicative ((<$>))
@@ -59,7 +60,8 @@ module ConnectFour.Server where
     queue :: TVar (Maybe TCPClient),
     tcpClients :: TVar (Map String TCPClient),
     wsClients :: TVar (Map String WSClient),
-    serverGames :: TVar [ServerGame]
+    serverGames :: TVar [ServerGame],
+    challengedTCPClients :: TVar (Map String TCPClient)
   }
 
   data ServerGame = ServerGame {
@@ -157,6 +159,9 @@ module ConnectFour.Server where
     uuid <- liftIO $ UUID.toString <$> UUID.nextRandom
     liftIO $ handshakeWS uuid socket state
 
+    wsClients <- liftIO $ readTVarIO wsCs
+    liftIO $ putStrLn $ show $ length $ Map.keys wsClients
+
     return EIO.SocketApp {
       EIO.saApp = processCommandWS socket state
     , EIO.saOnDisconnect = cleanupWS uuid state
@@ -204,6 +209,8 @@ module ConnectFour.Server where
                     moveCommand client args state
                   (Protocol.chat -> True) -> do
                     chatCommand client args state
+                  (Protocol.challenge -> True) -> do
+                    challengeCommand client args state
                   _ -> do
                     sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
                     hClose handle)
@@ -272,8 +279,8 @@ module ConnectFour.Server where
         hClose handle
 
   chatCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  chatCommand client@TCPClient{tcpName=name, tcpChat=chat, tcpHandle=handle} args state = do
-    if (not chat) then do
+  chatCommand client@TCPClient{tcpName=name, tcpChat=challenge, tcpHandle=handle} args state = do
+    if (not challenge) then do
       sendMessageTCP client $ Protocol.errorInvalidClient
       hClose handle
     else do
@@ -287,6 +294,30 @@ module ConnectFour.Server where
           clients <- tcpClientsInLobby state
           let chatClients = filter (\TCPClient{tcpChat=chat} -> chat) clients
           mapM_ (\client -> sendMessageTCP client msg) chatClients
+
+  challengeCommand :: TCPClient -> [String] -> ServerState -> IO ()
+  challengeCommand client@TCPClient{tcpName=name, tcpChat=chat, tcpHandle=handle} args state@ServerState{tcpClients=tcpCs,challengedTCPClients=chTcpCs} = do
+    let challengeeName = args !! 1
+    if (not chat) || (name == challengeeName) then do
+      sendMessageTCP client $ Protocol.errorInvalidClient
+      hClose handle
+    else do
+      tcpClients <- readTVarIO tcpCs
+      let maybeChallengee = lookup challengeeName tcpClients
+      case maybeChallengee of
+        Just challengee@TCPClient{tcpName = challengeeName} -> do
+          challengedTCPClients <- readTVarIO chTcpCs
+
+          -- challengee is already challanger or challengee
+          if challengeeName `elem` ((Map.keys challengedTCPClients) ++ map (\TCPClient{tcpName=name} -> name) (Map.elems challengedTCPClients)) then do
+            sendMessageTCP client Protocol.errorInvalidClient
+            -- do not close handle, this could just happen without any notice towards client
+          else do
+            atomically $ writeTVar chTcpCs (Map.insert name challengee challengedTCPClients)
+            sendMessageTCP challengee $ Protocol.challenged ++ " " ++ name
+        Nothing -> do
+          sendMessageTCP client Protocol.errorInvalidClient
+          hClose handle
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
   shutdownServerGame serverGame ServerState{serverGames=sg} = do

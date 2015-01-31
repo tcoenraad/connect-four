@@ -16,6 +16,9 @@ module ConnectFour.Protocol where
   chat :: [String] -> Bool
   chat s = head s == "chat" && length s >= 2
 
+  challenge :: [String] -> Bool
+  challenge s = head s == "challenge" && length s == 2
+
   true :: String
   true = "true"
 
@@ -40,8 +43,11 @@ module ConnectFour.Protocol where
   sendChat :: String
   sendChat = "sendChat"
 
+  challenged :: String
+  challenged = "challenged"
+
   supported :: String
-  supported = "100"
+  supported = "110"
 
   boolTrue :: Char
   boolTrue = '1'
