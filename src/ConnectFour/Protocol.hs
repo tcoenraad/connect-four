@@ -19,6 +19,12 @@ module ConnectFour.Protocol where
   challenge :: [String] -> Bool
   challenge s = head s == "challenge" && length s == 2
 
+  acceptChallenge :: [String] -> Bool
+  acceptChallenge s = head s == "acceptChallenge" && length s == 1
+
+  rejectChallenge :: [String] -> Bool
+  rejectChallenge s = head s == "rejectChallenge" && length s == 1
+
   true :: String
   true = "true"
 
@@ -45,6 +51,12 @@ module ConnectFour.Protocol where
 
   challenged :: String
   challenged = "challenged"
+
+  challengeCancelled :: String
+  challengeCancelled = "challengeCancelled"
+
+  reject :: String
+  reject = "reject"
 
   supported :: String
   supported = "110"

@@ -13,6 +13,7 @@ module ConnectFour.Server where
   import Data.Map.Strict hiding (map, filter, (\\))
   import Data.List.Split
   import Data.List hiding (lookup)
+  import Data.Maybe (fromJust)
   import Data.String.Utils
 
   import Control.Applicative ((<$>))
@@ -86,6 +87,17 @@ module ConnectFour.Server where
                                                       | otherwise = findServerGame' name gs
   findServerGame' _ [] = Nothing
 
+  findChallengerNameByChallengeeName :: String -> ServerState -> IO (Maybe String)
+  findChallengerNameByChallengeeName challengeeName ServerState{challengedTCPClients=chTcpCs} = do
+    challengedTCPClients <- readTVarIO chTcpCs
+    return $ findChallengerNameByChallengeeName' challengeeName $ toList challengedTCPClients
+
+  findChallengerNameByChallengeeName' :: String -> [(String, TCPClient)] -> Maybe String
+  findChallengerNameByChallengeeName' _ [] = Nothing
+  findChallengerNameByChallengeeName' challengeeName' ((challengerName, TCPClient{tcpName=challengeeName}):challengedTCPClients)
+    | challengeeName == challengeeName' = Just challengerName
+    | otherwise = findChallengerNameByChallengeeName' challengeeName challengedTCPClients
+
   clientsToString :: [TCPClient] -> String
   clientsToString [] = ""
   clientsToString [TCPClient{tcpName=name}] = name
@@ -95,9 +107,6 @@ module ConnectFour.Server where
   clientsToStringWithOptions [] = ""
   clientsToStringWithOptions (TCPClient{tcpName=name, tcpChat=chat, tcpChallenge=challenge, tcpLeaderboard=leaderboard}:cs) =
     name ++ " "++ (boolToString chat) ++ (boolToString challenge) ++ (boolToString leaderboard) ++ ", " ++ clientsToStringWithOptions cs
-
-  serverGameToClients :: ServerGame -> [TCPClient]
-  serverGameToClients ServerGame{players=ps} = ps
 
   getCurrentPlayer :: Game -> Int
   getCurrentPlayer Game{currentPlayer=cp} = cp
@@ -211,6 +220,10 @@ module ConnectFour.Server where
                     chatCommand client args state
                   (Protocol.challenge -> True) -> do
                     challengeCommand client args state
+                  (Protocol.acceptChallenge -> True) -> do
+                    responseChallengeCommand client True state
+                  (Protocol.rejectChallenge -> True) -> do
+                    responseChallengeCommand client False state
                   _ -> do
                     sendMessageTCP TCPClient{tcpHandle=handle} Protocol.errorUnknownCommand -- unknown command
                     hClose handle)
@@ -232,19 +245,23 @@ module ConnectFour.Server where
           return ()
         else do
           atomically $ writeTVar q Nothing
-          newGame <- newTVarIO initalizeGame
-          let clients = [queuedClient, client]
-          let game = ServerGame{ players = clients, game = newGame }
-          atomically $ do
-            games <- readTVar sg
-            writeTVar sg $ games ++ [game]
-          mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
-
-          pushUpdateLog "<server>" ("<game started> " ++ (clientsToString clients)) state
-          pushUpdateAll state
+          startGame [queuedClient, client] state
       Nothing -> do
         atomically $ writeTVar q (Just client)
         return ()
+
+  startGame :: [TCPClient] -> ServerState -> IO ()
+  startGame clients state@ServerState{serverGames=sg} = do
+    newGame <- newTVarIO initalizeGame
+    let game = ServerGame{ players = clients, game = newGame }
+    atomically $ do
+      games <- readTVar sg
+      writeTVar sg $ games ++ [game]
+    mapM_ (\client -> sendMessageTCP client (Protocol.gameStarted ++ " " ++ clientsToString clients)) clients
+
+    pushUpdateLog "<server>" ("<game started> " ++ (clientsToString clients)) state
+    pushUpdateAll state
+
 
   moveCommand :: TCPClient -> [String] -> ServerState -> IO ()
   moveCommand client@TCPClient{tcpName=name, tcpHandle=handle} args state = do
@@ -257,7 +274,7 @@ module ConnectFour.Server where
           let maybeGame = Game.dropCoin game row
           case maybeGame of
             Just game -> do
-              let clients = serverGameToClients serverGame
+              let clients = (\ServerGame{players=ps} -> ps) serverGame
               atomically $ writeTVar g game
               mapM_ (\client -> sendMessageTCP client (Protocol.moveDone ++ " " ++ show row)) clients
               if Game.winningColumn game row then do
@@ -296,28 +313,60 @@ module ConnectFour.Server where
           mapM_ (\client -> sendMessageTCP client msg) chatClients
 
   challengeCommand :: TCPClient -> [String] -> ServerState -> IO ()
-  challengeCommand client@TCPClient{tcpName=name, tcpChat=chat, tcpHandle=handle} args state@ServerState{tcpClients=tcpCs,challengedTCPClients=chTcpCs} = do
+  challengeCommand client@TCPClient{tcpName=challengerName, tcpChallenge=challenge, tcpHandle=handle} args
+    state@ServerState{serverGames=sg, tcpClients=tcpCs, challengedTCPClients=chTcpCs} = do
+    serverGames <- readTVarIO sg
+    let ingamePlayers = concat $ map (\ServerGame{players=ps} -> ps) serverGames
     let challengeeName = args !! 1
-    if (not chat) || (name == challengeeName) then do
+    if (not challenge) || (challengerName == challengeeName) || client `elem` ingamePlayers then do
       sendMessageTCP client $ Protocol.errorInvalidClient
       hClose handle
     else do
+      challengedTCPClients <- readTVarIO chTcpCs
+      -- cancel previous challenge, if any
+      let maybeClientInChallenge = lookup challengerName challengedTCPClients
+      case maybeClientInChallenge of
+        Just challengee -> do
+          sendMessageTCP challengee $ Protocol.challengeCancelled ++ " " ++ Protocol.reject
+        Nothing -> return ()
+
       tcpClients <- readTVarIO tcpCs
       let maybeChallengee = lookup challengeeName tcpClients
       case maybeChallengee of
-        Just challengee@TCPClient{tcpName = challengeeName} -> do
-          challengedTCPClients <- readTVarIO chTcpCs
-
-          -- challengee is already challanger or challengee
-          if challengeeName `elem` ((Map.keys challengedTCPClients) ++ map (\TCPClient{tcpName=name} -> name) (Map.elems challengedTCPClients)) then do
-            sendMessageTCP client Protocol.errorInvalidClient
-            -- do not close handle, this could just happen without any notice towards client
+        -- challengee exists
+        Just challengee@TCPClient{tcpName = challengeeName, tcpChallenge=challengeeChallenge} -> do
+          if (not challengeeChallenge) then do
+            sendMessageTCP client $ Protocol.errorInvalidClient
+            hClose handle
           else do
-            atomically $ writeTVar chTcpCs (Map.insert name challengee challengedTCPClients)
-            sendMessageTCP challengee $ Protocol.challenged ++ " " ++ name
+            -- challengee is already in game, challanger or challengee
+            if challengee `elem` ingamePlayers || challengeeName `elem` (Map.keys challengedTCPClients) || challengee `elem` (Map.elems challengedTCPClients) then do
+              sendMessageTCP client $ Protocol.challengeCancelled ++ " " ++ Protocol.reject
+              -- do not close handle, this could just happen without any notice towards client
+            else do
+              atomically $ writeTVar chTcpCs (Map.insert challengerName challengee challengedTCPClients)
+              sendMessageTCP challengee $ Protocol.challenged ++ " " ++ challengerName
         Nothing -> do
+          -- challengee does not exist
           sendMessageTCP client Protocol.errorInvalidClient
           hClose handle
+
+  responseChallengeCommand :: TCPClient -> Bool -> ServerState -> IO ()
+  responseChallengeCommand client@TCPClient{tcpName=challengeeName, tcpHandle=handle} accept state@ServerState{tcpClients=tcpCs, challengedTCPClients=chTcpCs} = do
+    tcpClients <- readTVarIO tcpCs
+    maybeChallengerName <- findChallengerNameByChallengeeName challengeeName state
+    case maybeChallengerName of
+      Just challengerName -> do
+        let challenger = fromJust $ lookup challengerName tcpClients
+        challengedTCPClients <- readTVarIO chTcpCs
+        atomically $ writeTVar tcpCs $ Map.delete challengerName challengedTCPClients
+        if accept then do
+          startGame [challenger, client] state
+        else do
+          sendMessageTCP challenger $ Protocol.challengeCancelled ++ " " ++ Protocol.reject
+      Nothing -> do
+        sendMessageTCP client $ Protocol.errorInvalidClient
+        hClose handle
 
   shutdownServerGame :: ServerGame -> ServerState -> IO ()
   shutdownServerGame serverGame ServerState{serverGames=sg} = do
