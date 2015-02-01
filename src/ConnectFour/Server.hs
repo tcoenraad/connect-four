@@ -343,7 +343,7 @@ module ConnectFour.Server where
     maybeServerGame <- findServerGame name state
     case maybeServerGame of
       Just serverGame@ServerGame{players=ps} -> do
-        mapM_ (\client -> sendMessageTCP client (Protocol.errorInvalidMove)) ps
+        mapM_ (\client -> sendMessageTCP client (Protocol.errorInvalidMove)) (ps \\ [client])
         shutdownServerGame serverGame state
       _ -> return ()
     pushUpdateAll state
